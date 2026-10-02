@@ -4,6 +4,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hospital São José - Sistema Inteligente de Gestão e Monitoramento de Leitos</title>
+    
+    <!-- Firebase SDK (Modular CDN) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDU2o6d_p_gyEheKS_tt1SJlwsKL5wTQgM",
+            authDomain: "hospitalsaojose-7819b.firebaseapp.com",
+            projectId: "hospitalsaojose-7819b",
+            storageBucket: "hospitalsaojose-7819b.firebasestorage.app",
+            messagingSenderId: "559023248256",
+            appId: "1:559023248256:web:42fd92df5516c368ed2765",
+            measurementId: "G-NX7M01F07D"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        window.db = db;
+        window.firebaseModules = { doc, setDoc, getDoc, onSnapshot };
+
+        // Sincronização em tempo real ao carregar a página
+        window.addEventListener('DOMContentLoaded', () => {
+            carregarDadosDoFirebase();
+        });
+    </script>
+
     <style>
         :root {
             --primary: #0284c7;
@@ -631,7 +658,6 @@
                 </div>
             </div>
 
-            <!-- BARRA DE ACESSO RÁPIDO PARA O ADMINISTRADOR (MÉDICOS, PROCEDIMENTOS E UNIDADES EXTERNAS) -->
             <div class="notes-box" style="background:#f8fafc; border:2px dashed var(--primary); margin-bottom: 2rem;">
                 <h3 style="margin-bottom: 1rem; font-size: 1rem; color: var(--primary);">⚡ Barra de Acesso Rápido - Edição do Administrador</h3>
                 <div class="form-grid">
@@ -920,6 +946,48 @@
         var transferenciasAtivas = [];
         var transferenciasFinalizadas = [];
         var indexMovimentoAtual = null;
+
+        // --- FUNÇÕES DE SINCRONIZAÇÃO COM FIREBASE ---
+        async function salvarDadosNoFirebase() {
+            if (!window.db) return;
+            try {
+                const { doc, setDoc } = window.firebaseModules;
+                await setDoc(doc(window.db, "hospital", "dados"), {
+                    setoresData: setoresData,
+                    movimentacoesHistorico: movimentacoesHistorico.map(m => ({ ...m, dataDesfechoObj: m.dataDesfechoObj ? m.dataDesfechoObj.toISOString() : null, dataAdmissaoObj: m.dataAdmissaoObj ? m.dataAdmissaoObj.toISOString() : null })),
+                    transferenciasAtivas: transferenciasAtivas,
+                    transferenciasFinalizadas: transferenciasFinalizadas,
+                    basePacientesCadastrados: basePacientesCadastrados
+                });
+            } catch (e) {
+                console.error("Erro ao salvar no Firebase: ", e);
+            }
+        }
+
+        function carregarDadosDoFirebase() {
+            if (!window.db) return;
+            const { doc, onSnapshot } = window.firebaseModules;
+            onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.setoresData) setoresData = data.setoresData;
+                    if (data.movimentacoesHistorico) {
+                        movimentacoesHistorico = data.movimentacoesHistorico.map(m => ({
+                            ...m,
+                            dataDesfechoObj: m.dataDesfechoObj ? new Date(m.dataDesfechoObj) : null,
+                            dataAdmissaoObj: m.dataAdmissaoObj ? new Date(m.dataAdmissaoObj) : null
+                        }));
+                    }
+                    if (data.transferenciasAtivas) transferenciasAtivas = data.transferenciasAtivas;
+                    if (data.transferenciasFinalizadas) transferenciasFinalizadas = data.transferenciasFinalizadas;
+                    if (data.basePacientesCadastrados) basePacientesCadastrados = data.basePacientesCadastrados;
+
+                    renderizarPainelLeitos();
+                    aplicarPermissoesInterface();
+                }
+            });
+        }
+        // ---------------------------------------------
 
         function cadastrarNovoMedicoLocal() {
             if(usuarioAtual.perfil !== 'Administrador') { alert('Acesso restrito ao Administrador.'); return; }
@@ -1328,6 +1396,7 @@
 
             fecharModalEditarPaciente();
             atualizarTabelaPacientesInternos();
+            salvarDadosNoFirebase();
             alert('Cadastro do paciente atualizado com sucesso!');
         }
 
@@ -1479,6 +1548,7 @@
             atualizarTabelaPacientesInternos();
             renderizarPainelLeitos();
             atualizarResumoPlantao();
+            salvarDadosNoFirebase();
             
             document.getElementById('mov-atendimento').value = '';
             document.getElementById('mov-paciente').value = '';
@@ -1590,6 +1660,7 @@
             atualizarTabelaMovimentacoes();
             atualizarTabelaHistoricoGeral();
             atualizarTabelaPacientesInternos();
+            salvarDadosNoFirebase();
             alert('Alocação efetuada com sucesso!');
         }
 
@@ -1655,6 +1726,7 @@
                 atualizarTabelaMovimentacoes();
                 atualizarTabelaHistoricoGeral();
                 atualizarTabelaPacientesInternos();
+                salvarDadosNoFirebase();
                 alert('Registo excluído com sucesso.');
             }
         }
@@ -1670,6 +1742,7 @@
                 atualizarTabelaMovimentacoes();
                 atualizarTabelaHistoricoGeral();
                 atualizarTabelaPacientesInternos();
+                salvarDadosNoFirebase();
                 alert('Histórico limpo.');
             }
         }
@@ -1708,6 +1781,7 @@
             document.getElementById('transf-paciente').value = '';
             document.getElementById('transf-pendencias').value = '';
             atualizarTabelasTransferencias();
+            salvarDadosNoFirebase();
             alert('Transferência registada com sucesso!');
         }
 
@@ -1772,6 +1846,7 @@
             atualizarTabelaMovimentacoes();
             atualizarTabelaPacientesInternos();
             atualizarTabelasTransferencias();
+            salvarDadosNoFirebase();
             alert('Transferência baixada, leito liberado e indicador computado com sucesso!');
         }
 
@@ -1786,6 +1861,7 @@
                 leitos: Array.from({length: qtd}, function(_, i) { return {n: (i+1).toString(), status: "disponivel", paciente: "", prontuario: ""}; })
             });
             renderizarPainelLeitos();
+            salvarDadosNoFirebase();
             alert('Setor criado!');
         }
 
@@ -1794,7 +1870,7 @@
             var nome = prompt("Nome do setor a excluir:");
             if(!nome) return;
             var idx = setoresData.findIndex(function(s) { return s.nome === nome.toUpperCase(); });
-            if(idx !== -1) { setoresData.splice(idx, 1); renderizarPainelLeitos(); alert('Excluído.'); }
+            if(idx !== -1) { setoresData.splice(idx, 1); renderizarPainelLeitos(); salvarDadosNoFirebase(); alert('Excluído.'); }
         }
 
         function adicionarNovoLeitoSetor() {
@@ -1805,6 +1881,7 @@
             if(sObj && lNome) {
                 sObj.leitos.push({ n: lNome, status: 'disponivel', paciente: '', prontuario: '' });
                 renderizarPainelLeitos();
+                salvarDadosNoFirebase();
                 alert('Leito adicionado!');
             }
         }
@@ -1816,7 +1893,7 @@
             var sObj = setoresData.find(function(s) { return s.nome === setorNome; });
             if(sObj) {
                 var idx = sObj.leitos.findIndex(function(l) { return l.n === lNum; });
-                if(idx !== -1) { sObj.leitos.splice(idx, 1); renderizarPainelLeitos(); alert('Leito excluído.'); }
+                if(idx !== -1) { sObj.leitos.splice(idx, 1); renderizarPainelLeitos(); salvarDadosNoFirebase(); alert('Leito excluído.'); }
             }
         }
 
@@ -1874,7 +1951,6 @@
                 totalL += s.leitos.length;
             });
 
-            // Ocupação Atual (Momento)
             var totalOcpAtual = 0;
             setoresParaCalc.forEach(function(s) {
                 totalOcpAtual += s.leitos.filter(function(l) { return l.status === 'ocupado'; }).length;
@@ -1883,7 +1959,6 @@
             var txOcpAtualStr = (txOcpAtualVal * 100).toFixed(1) + '%';
             var txDesocpAtualStr = ((1 - txOcpAtualVal) * 100).toFixed(1) + '%';
 
-            // Acumulados progressivos por período (garantindo que se houver admissões ou histórico, o acumulado some e permaneça ativo)
             var countAdm = 0, countAlt = 0, countOb = 0, countTrfInt = 0, countTrfExt = 0, countResInt = 0, countResExt = 0;
             var somaPermanenciaDias = 0;
             var totalSaidasValidas = 0;
@@ -1939,7 +2014,6 @@
                 }
             });
 
-            // Se houver admissões ou movimentações registradas, garante que os acumulados considerem a presença acumulada (mínimo proporcional ao número de admissões ocorridas)
             var totalMovsPeriodo = movimentacoesHistorico.filter(function(m) {
                 var dt = new Date(m.dataDesfechoObj || new Date());
                 return dt >= dataIni && dt <= dataFim;
