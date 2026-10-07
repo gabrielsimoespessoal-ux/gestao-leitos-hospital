@@ -361,6 +361,69 @@
         setTimeout(repararOliviaOrfa,1200);
         setTimeout(repararOliviaOrfa,3000);
 
+        // --- Mudança de leito: destacar e selecionar automaticamente a reserva do paciente ---
+        const oldMudarLeitoPaciente=w.mudarLeitoPaciente;
+        w.mudarLeitoPaciente=function(index){
+          w.indexMovimentoAtual=index;
+          const select=d.getElementById('modal-select-novo-leito');
+          const acaoSel=d.getElementById('modal-acao-leito');
+          const modalMud=d.getElementById('modal-mudar-leito');
+          const m=(w.movimentacoesHistorico||[])[index];
+          if(!select||!m)return oldMudarLeitoPaciente?oldMudarLeitoPaciente.call(w,index):undefined;
+
+          const reservas=[];
+          const outros=[];
+          (w.setoresData||[]).forEach(s=>s.leitos.forEach(l=>{
+            if(l.status!=='disponivel'&&l.status!=='reservado')return;
+            const item={s,l};
+            if(l.status==='reservado'&&((m.atendimento&&l.prontuario===m.atendimento)||(m.paciente&&String(l.paciente||'').trim().toUpperCase()===String(m.paciente||'').trim().toUpperCase()))) reservas.push(item);
+            else outros.push(item);
+          }));
+
+          select.innerHTML='';
+          [...reservas,...outros].forEach(({s,l})=>{
+            const opt=d.createElement('option');
+            opt.value=s.nome+'||'+l.n;
+            const propria=reservas.some(x=>x.s===s&&x.l===l);
+            opt.textContent=(propria?'★ RESERVA DO PACIENTE — ':'')+s.nome+' - Leito '+l.n+' ('+(l.status==='reservado'?'reservado':'disponível')+')';
+            if(propria)opt.dataset.reservaPaciente='1';
+            select.appendChild(opt);
+          });
+
+          if(!select.options.length){w.alert('Não há leitos disponíveis ou reservados no momento.');return;}
+          if(reservas.length){
+            select.value=reservas[0].s.nome+'||'+reservas[0].l.n;
+            if(acaoSel)acaoSel.value='ocupado';
+          }
+          let aviso=d.getElementById('aviso-reserva-paciente-v6');
+          if(!aviso){
+            aviso=d.createElement('div');aviso.id='aviso-reserva-paciente-v6';
+            aviso.style.cssText='margin:0 0 12px;padding:9px 11px;border-radius:6px;background:#eef6ff;border-left:4px solid #2563eb;font-size:.85rem';
+            select.closest('.form-group')?.before(aviso);
+          }
+          aviso.style.display=reservas.length?'block':'none';
+          aviso.innerHTML=reservas.length?'<strong>Reserva encontrada:</strong> '+reservas.map(x=>x.s.nome+' — Leito '+x.l.n).join(', ')+'. O leito reservado já foi selecionado automaticamente.':'';
+          if(modalMud)modalMud.style.display='flex';
+        };
+
+        const oldConfirmarMudanca=w.confirmarMudancaLeitoModal;
+        w.confirmarMudancaLeitoModal=function(){
+          const idx=w.indexMovimentoAtual;
+          const m=(w.movimentacoesHistorico||[])[idx];
+          const valor=d.getElementById('modal-select-novo-leito')?.value;
+          const acao=d.getElementById('modal-acao-leito')?.value;
+          if(m&&valor&&acao==='ocupado'){
+            const partes=valor.split('||');
+            // Ao efetivar ocupação, remove outras reservas do MESMO paciente para evitar duplicidade.
+            (w.setoresData||[]).forEach(s=>s.leitos.forEach(l=>{
+              const mesmaReserva=l.status==='reservado'&&((m.atendimento&&l.prontuario===m.atendimento)||(m.paciente&&String(l.paciente||'').trim().toUpperCase()===String(m.paciente||'').trim().toUpperCase()));
+              const selecionado=s.nome===partes[0]&&l.n===partes[1];
+              if(mesmaReserva&&!selecionado){l.status='disponivel';l.paciente='';l.prontuario='';}
+            }));
+          }
+          return oldConfirmarMudanca?oldConfirmarMudanca.apply(w,arguments):undefined;
+        };
+
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
