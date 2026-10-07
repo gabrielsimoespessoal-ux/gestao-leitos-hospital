@@ -312,6 +312,55 @@
         const currentRender=w.renderizarPainelLeitos;
         w.renderizarPainelLeitos=function(){const r=currentRender.apply(w,arguments);setTimeout(()=>{aplicarFiltroPainel();},20);return r;};
 
+        // --- exclusão de movimentação deve manter o painel de leitos consistente ---
+        w.excluirMovimentacao=async function(index){
+          if(w.usuarioAtual?.perfil!=='Administrador'){w.alert('Acesso restrito.');return;}
+          const m=(w.movimentacoesHistorico||[])[index];
+          if(!m){w.alert('Registro não encontrado.');return;}
+          const vinculados=[];
+          w.setoresData.forEach(s=>s.leitos.forEach(l=>{
+            const mesmoPr=m.atendimento&&l.prontuario===m.atendimento;
+            const mesmoNome=m.paciente&&String(l.paciente||'').trim().toUpperCase()===String(m.paciente||'').trim().toUpperCase();
+            if((mesmoPr||mesmoNome)&&(l.status==='ocupado'||l.status==='reservado'))vinculados.push({s,l});
+          }));
+          let mensagem='Deseja excluir este registro de movimentação?';
+          if(vinculados.length){
+            mensagem+='\n\nO paciente ainda está vinculado a '+vinculados.map(x=>x.s.nome+' / Leito '+x.l.n+' ('+x.l.status+')').join(', ')+'.\nAo confirmar, o leito também será LIBERADO para evitar paciente excluído permanecendo reservado/ocupado.';
+          }
+          if(!w.confirm(mensagem))return;
+          w.movimentacoesHistorico.splice(index,1);
+          vinculados.forEach(({l})=>{l.status='disponivel';l.paciente='';l.prontuario='';});
+          const aindaExiste=(w.movimentacoesHistorico||[]).some(x=>x.atendimento===m.atendimento)||w.setoresData.some(s=>s.leitos.some(l=>l.prontuario===m.atendimento));
+          if(!aindaExiste&&m.atendimento&&w.basePacientesCadastrados?.[m.atendimento]){
+            delete w.basePacientesCadastrados[m.atendimento];
+          }
+          if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+          if(typeof w.atualizarTabelaMovimentacoes==='function')w.atualizarTabelaMovimentacoes();
+          if(typeof w.atualizarTabelaHistoricoGeral==='function')w.atualizarTabelaHistoricoGeral();
+          if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
+          if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+          w.alert(vinculados.length?'Registro excluído e leito liberado com sucesso.':'Registro excluído com sucesso.');
+        };
+
+        // reparo pontual do leito órfão informado: OLIVIA MATOS
+        async function repararOliviaOrfa(){
+          const norm=x=>String(x||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim().toUpperCase();
+          let alterou=false;
+          w.setoresData.forEach(s=>s.leitos.forEach(l=>{
+            if(l.status!=='reservado' || !norm(l.paciente).includes('OLIVIA MATOS'))return;
+            const existeMov=(w.movimentacoesHistorico||[]).some(m=>(l.prontuario&&m.atendimento===l.prontuario)||norm(m.paciente)===norm(l.paciente));
+            if(!existeMov){l.status='disponivel';l.paciente='';l.prontuario='';alterou=true;}
+          }));
+          if(alterou){
+            if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+            if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
+            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+            console.info('Leito órfão de Olivia Matos foi liberado e sincronizado.');
+          }
+        }
+        setTimeout(repararOliviaOrfa,1200);
+        setTimeout(repararOliviaOrfa,3000);
+
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
