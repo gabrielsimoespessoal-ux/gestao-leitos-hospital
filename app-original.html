@@ -269,6 +269,10 @@
                         </select>
                     </div>
                     <div class="form-group">
+                        <label>Previsão de Alta <span style="font-weight:400;color:#64748b">(opcional)</span></label>
+                        <input type="datetime-local" id="mov-previsao-alta-paciente">
+                    </div>
+                    <div class="form-group">
                         <label>Ação Operacional no Leito *</label>
                         <select id="mov-acao" onchange="alternarCamposCirurgicosMov()">
                             <option value="Admissão">Admissão (Ocupa o Leito)</option>
@@ -1061,6 +1065,7 @@
                 if(dados.nascimento) document.getElementById('mov-nascimento').value = dados.nascimento;
                 if(dados.sexo) document.getElementById('mov-sexo').value = dados.sexo;
                 if(dados.perfil) document.getElementById('mov-perfil-vaga').value = dados.perfil;
+                if(document.getElementById('mov-previsao-alta-paciente')) document.getElementById('mov-previsao-alta-paciente').value = dados.previsaoAlta || '';
             }
         }
 
@@ -1439,6 +1444,7 @@
             var convenio = document.getElementById('mov-convenio').value;
             var origem = document.getElementById('mov-origem').value;
             var precaucao = document.getElementById('mov-precaucao').value;
+            var previsaoAltaPaciente = document.getElementById('mov-previsao-alta-paciente') ? document.getElementById('mov-previsao-alta-paciente').value : '';
             var acao = document.getElementById('mov-acao').value;
 
             var medicoCirurgiao = '-';
@@ -1477,10 +1483,15 @@
                 basePacientesCadastrados[atendimento] = {};
             }
             basePacientesCadastrados[atendimento] = {
+                ...basePacientesCadastrados[atendimento],
                 nome: paciente,
                 nascimento: nascimento,
                 sexo: sexo,
                 perfil: perfilVaga,
+                convenio: convenio,
+                origem: origem,
+                precaucao: precaucao,
+                previsaoAlta: previsaoAltaPaciente || basePacientesCadastrados[atendimento].previsaoAlta || '',
                 dataAdmissao: (acao === 'Admissão' || acao === 'Transferência Interna') ? dataObjNow : (basePacientesCadastrados[atendimento].dataAdmissao || dataObjNow)
             };
 
@@ -1553,6 +1564,7 @@
             document.getElementById('mov-atendimento').value = '';
             document.getElementById('mov-paciente').value = '';
             document.getElementById('mov-nascimento').value = '';
+            if(document.getElementById('mov-previsao-alta-paciente')) document.getElementById('mov-previsao-alta-paciente').value = '';
             document.getElementById('mov-procedimento').value = '';
             document.getElementById('bloco-campos-cirurgicos').style.display = 'none';
             document.getElementById('mov-acao').selectedIndex = 0;
