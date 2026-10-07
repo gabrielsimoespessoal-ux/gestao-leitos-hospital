@@ -1159,6 +1159,155 @@
           return r;
         };
         setTimeout(renderResumoOcupacaoV12,1200);
+
+        // --- Ações operacionais do atalho: execução direta e consistente ---
+        async function registrarEventoAtalhoV13({acao,pr,nome,nasc,perfil,sexo,convenio,origem,setor,leito,detalhe}){
+          const agora=new Date();
+          const hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+          const data=agora.toLocaleDateString('pt-BR')+' '+hora;
+          if(!Array.isArray(w.movimentacoesHistorico))w.movimentacoesHistorico=[];
+          w.movimentacoesHistorico.unshift({
+            data,dataIso:agora.toISOString(),hora,
+            atendimentoNasc:'Pront: '+(pr||'-')+'<br><small>Nasc: '+(nasc||'-')+'</small>',
+            atendimento:pr||'-',nascimento:nasc||'',paciente:nome||'-',
+            setor:setor+' (Leito '+leito+')',
+            origem:origem||setor,destino:setor,
+            perfil:(perfil||'-')+(sexo?' ('+sexo+')':''),
+            convenio:convenio||'-',
+            acao:acao+(detalhe?'<br><small>'+detalhe+'</small>':''),
+            dataDesfecho:data,dataDesfechoObj:agora,
+            dataAdmissaoObj:w.basePacientesCadastrados?.[pr]?.dataAdmissao||agora
+          });
+        }
+
+        async function finalizarAtualizacaoAtalhoV13(){
+          if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+          if(typeof w.atualizarTabelaMovimentacoes==='function')w.atualizarTabelaMovimentacoes();
+          if(typeof w.atualizarTabelaHistoricoGeral==='function')w.atualizarTabelaHistoricoGeral();
+          if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
+          if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+          const modal=d.getElementById('modal-editar-paciente');if(modal)modal.style.display='none';
+        }
+
+        async function confirmarAcaoPainelV13(){
+          const acao=d.getElementById('edit-acao-v4')?.value;
+          if(!acao){w.alert('Selecione a Ação Operacional.');return;}
+
+          const oldPr=d.getElementById('edit-prontuario')?.value||'';
+          const novoPr=(d.getElementById('edit-prontuario-vis-v3')?.value||'').trim();
+          const pr=novoPr||oldPr;
+          const nome=(d.getElementById('edit-nome')?.value||'').trim();
+          const nasc=d.getElementById('edit-nasc')?.value||'';
+          const perfil=d.getElementById('edit-perfil')?.value||'';
+          const sexo=d.getElementById('edit-sexo-v3')?.value||'';
+          const convenio=d.getElementById('edit-convenio-v3')?.value||'SUS';
+          const origem=d.getElementById('edit-origem-v3')?.value||'';
+
+          const atual=setorAtualPorPr(oldPr)||setorAtualPorPr(pr);
+          if(!atual){w.alert('Não foi possível localizar o leito atual deste paciente.');return;}
+          const s=atual.s,l=atual.l;
+
+          // Atualiza prontuário informado no cadastro, se necessário.
+          if(novoPr&&novoPr!==oldPr){
+            const existente=w.basePacientesCadastrados?.[novoPr];
+            const norm=x=>String(x||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+            if(existente&&norm(existente.nome)!==norm(nome)){
+              w.alert('O prontuário '+novoPr+' já pertence a outro paciente: '+(existente.nome||'cadastro existente')+'.');
+              return;
+            }
+            const antigo=w.basePacientesCadastrados?.[oldPr]||{};
+            delete w.basePacientesCadastrados[oldPr];
+            w.basePacientesCadastrados[novoPr]={...(existente||{}),...antigo,nome,nascimento:nasc,perfil,sexo,convenio,origem};
+            w.setoresData.forEach(ss=>ss.leitos.forEach(ll=>{if(ll.prontuario===oldPr){ll.prontuario=novoPr;ll.paciente=nome;}}));
+            d.getElementById('edit-prontuario').value=novoPr;
+          }
+
+          // Ações que dependem de escolha/dados adicionais: abre a tela completa já preenchida.
+          if(['Transferência Interna','Reservado','Reserva Cirúrgica Eletiva'].includes(acao)){
+            if(acao==='Transferência Interna'){
+              w.alert('Para Transferência Interna é necessário escolher o novo setor e leito. A tela completa será aberta já com o paciente preenchido.');
+            }else if(acao==='Reservado'){
+              w.alert('A reserva comum é destinada à criação/alocação de uma reserva. A tela completa será aberta para selecionar o leito.');
+            }else{
+              w.alert('Para Reserva Cirúrgica Eletiva é necessário informar médico, data/hora e procedimento. A tela completa será aberta.');
+            }
+            prepararAcaoOperacionalPainel(true);
+            return;
+          }
+
+          if(acao==='Reserva Cirúrgica com Previsão de Alta'){
+            w.alert('Esta modalidade exige previsão de alta, médico e procedimento. Use a tela completa de Movimentação & Reserva Cirúrgica.');
+            prepararAcaoOperacionalPainel(true);
+            return;
+          }
+
+          if(acao==='Bloqueio'){
+            if(l.status==='ocupado'||l.status==='reservado'){
+              w.alert('Não é permitido bloquear um leito ocupado ou reservado. Primeiro registre a saída/transferência do paciente.');
+              return;
+            }
+            if(!w.confirm('Confirmar BLOQUEIO do leito '+l.n+' de '+s.nome+'?'))return;
+            l.status='bloqueado';l.paciente='';l.prontuario='';
+            await registrarEventoAtalhoV13({acao:'Bloqueio de Leito',pr,nome,nasc,perfil,sexo,convenio,origem,setor:s.nome,leito:l.n});
+            await finalizarAtualizacaoAtalhoV13();
+            w.alert('Leito bloqueado com sucesso.');
+            return;
+          }
+
+          if(acao==='Admissão'){
+            if(l.status==='ocupado'&&l.prontuario===pr){
+              w.alert('Este paciente já está admitido e ocupa este leito.');
+              return;
+            }
+            if(l.status!=='reservado'&&l.status!=='disponivel'){
+              w.alert('A admissão direta só pode ser feita em leito reservado para o paciente ou disponível.');
+              return;
+            }
+            if(l.status==='reservado'&&l.prontuario&&l.prontuario!==pr){
+              w.alert('Este leito está reservado para outro paciente.');
+              return;
+            }
+            if(!pr||isTemp(pr)){w.alert('Informe o prontuário definitivo antes de confirmar a admissão.');return;}
+            if(!nome||!nasc||!perfil||!sexo){w.alert('Complete nome, nascimento, perfil e sexo antes de admitir.');return;}
+            if(!perfilCompativel(s.nome,perfil)){w.alert(msgConflito(s.nome,perfil));return;}
+            if(!w.confirm('Confirmar ADMISSÃO de '+nome+' no leito '+l.n+' de '+s.nome+'?'))return;
+            l.status='ocupado';l.paciente=nome;l.prontuario=pr;
+            if(!w.basePacientesCadastrados[pr])w.basePacientesCadastrados[pr]={};
+            Object.assign(w.basePacientesCadastrados[pr],{nome,nascimento:nasc,perfil,sexo,convenio,origem,dataAdmissao:new Date()});
+            await registrarEventoAtalhoV13({acao:'Admissão',pr,nome,nasc,perfil,sexo,convenio,origem,setor:s.nome,leito:l.n});
+            await finalizarAtualizacaoAtalhoV13();
+            w.alert('Admissão registrada. O leito agora está ocupado.');
+            return;
+          }
+
+          const saidas=['Alta Hospitalar','Alta a Pedido','Evasão','Óbito','Transferência Externa','Disponível'];
+          if(saidas.includes(acao)){
+            if(!w.confirm('Confirmar '+acao.toUpperCase()+' de '+nome+' no leito '+l.n+' de '+s.nome+'?'))return;
+            const reservaEspecial=l.reservaPrevAlta?{...l.reservaPrevAlta}:null;
+            const acaoHistorico=acao==='Disponível'?'Liberação de Leito':acao;
+            await registrarEventoAtalhoV13({acao:acaoHistorico,pr,nome,nasc,perfil,sexo,convenio,origem,setor:s.nome,leito:l.n,
+              detalhe:reservaEspecial?'Após a saída, a reserva cirúrgica existente foi mantida para este leito.':''});
+
+            if(reservaEspecial){
+              l.status='reservado';
+              l.paciente=reservaEspecial.paciente;
+              l.prontuario=reservaEspecial.prontuario;
+              delete l.reservaPrevAlta;
+            }else{
+              l.status='disponivel';
+              l.paciente='';
+              l.prontuario='';
+            }
+            await finalizarAtualizacaoAtalhoV13();
+            w.alert(acaoHistorico+' registrada com sucesso. '+(reservaEspecial?'O leito ficou reservado para o próximo paciente.':'O leito foi liberado.'));
+            return;
+          }
+
+          w.alert('A ação selecionada ainda exige a tela completa de Movimentação. Clique em “Abrir ação”.');
+        }
+
+        const btnConfirmarV13=d.getElementById('btn-confirmar-acao-v5');
+        if(btnConfirmarV13)btnConfirmarV13.onclick=confirmarAcaoPainelV13;
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
