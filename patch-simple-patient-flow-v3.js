@@ -141,7 +141,7 @@
           const blocoAcao=d.createElement('div');
           blocoAcao.id='atalho-acao-operacional-v4';
           blocoAcao.style.cssText='margin:0 0 1rem;padding:12px;background:#eef6ff;border:1px solid #bfdbfe;border-left:4px solid #0284c7;border-radius:8px';
-          blocoAcao.innerHTML='<label style="display:block;font-size:.8rem;font-weight:700;color:#0f172a;margin-bottom:6px">Ação Operacional — Atalho</label><div style="display:grid;grid-template-columns:1fr auto;gap:8px"><select id="edit-acao-v4" style="width:100%;padding:.55rem;border:1px solid var(--border);border-radius:6px"><option value="">Selecione a ação...</option><option value="Admissão">Admissão</option><option value="Transferência Interna">Transferência Interna</option><option value="Transferência Externa">Transferência Externa</option><option value="Reservado">Reserva Externa / Reserva de Leito</option><option value="Reserva Cirúrgica Eletiva">Reserva Cirúrgica Eletiva</option><option value="Alta Hospitalar">Alta Hospitalar</option><option value="Alta a Pedido">Alta a Pedido</option><option value="Evasão">Evasão</option><option value="Óbito">Óbito</option><option value="Bloqueio">Bloquear Leito / Manutenção</option><option value="Disponível">Liberar Leito</option></select><button type="button" class="btn" id="btn-acao-operacional-v4">Abrir ação</button></div><small style="display:block;margin-top:6px;color:#64748b">Leva os dados deste paciente preenchidos para a tela de movimentação, onde a ação pode ser conferida e executada.</small>';
+          blocoAcao.innerHTML='<label style="display:block;font-size:.8rem;font-weight:700;color:#0f172a;margin-bottom:6px">Ação Operacional — Atalho</label><div style="display:grid;grid-template-columns:1fr auto auto;gap:8px"><select id="edit-acao-v4" style="width:100%;padding:.55rem;border:1px solid var(--border);border-radius:6px"><option value="">Selecione a ação...</option><option value="Admissão">Admissão</option><option value="Transferência Interna">Transferência Interna</option><option value="Transferência Externa">Transferência Externa</option><option value="Reservado">Reserva Externa / Reserva de Leito</option><option value="Reserva Cirúrgica Eletiva">Reserva Cirúrgica Eletiva</option><option value="Alta Hospitalar">Alta Hospitalar</option><option value="Alta a Pedido">Alta a Pedido</option><option value="Evasão">Evasão</option><option value="Óbito">Óbito</option><option value="Bloqueio">Bloquear Leito / Manutenção</option><option value="Disponível">Liberar Leito</option></select><button type="button" class="btn" id="btn-acao-operacional-v4">Abrir ação</button><button type="button" class="btn btn-success" id="btn-confirmar-acao-v5">Confirmar ação agora</button></div><small style="display:block;margin-top:6px;color:#64748b">“Abrir ação” leva para a tela de movimentação. “Confirmar ação agora” executa diretamente pelo Painel de Leitos e registra no Histórico Geral e nas Movimentações.</small>';
           body.querySelector('div[style*="justify-content:flex-end"]')?.before(blocoAcao);
 
           const so=d.getElementById('edit-origem-v3');
@@ -160,14 +160,14 @@
           const ea=d.getElementById('edit-acao-v4'); if(ea)ea.value='';
         };
 
-        function abrirAtalhoAcaoOperacional(){
+        function prepararAcaoOperacionalPainel(irParaTela){
           const acao=d.getElementById('edit-acao-v4')?.value;
-          if(!acao){w.alert('Selecione a Ação Operacional.');return;}
-          const pr=d.getElementById('edit-prontuario').value;
-          const atual=setorAtualPorPr(pr);
-          const b=getBase(pr);
-          const novoPr=(d.getElementById('edit-prontuario-vis-v3')?.value||'').trim();
-          const nome=d.getElementById('edit-nome')?.value||b.nome||'';
+          if(!acao){w.alert('Selecione a Ação Operacional.');return null;}
+          const oldPr=d.getElementById('edit-prontuario').value;
+          const atual=setorAtualPorPr(oldPr);
+          const b=getBase(oldPr);
+          const informado=(d.getElementById('edit-prontuario-vis-v3')?.value||'').trim();
+          const nome=(d.getElementById('edit-nome')?.value||b.nome||'').trim();
           const nasc=d.getElementById('edit-nasc')?.value||b.nascimento||'';
           const perfil=d.getElementById('edit-perfil')?.value||b.perfil||'';
           const sexo=d.getElementById('edit-sexo-v3')?.value||b.sexo||'';
@@ -175,13 +175,31 @@
           const prec=d.getElementById('edit-precaucao-v3')?.value||b.precaucao||'Nenhuma';
           const origem=d.getElementById('edit-origem-v3')?.value||b.origem||'';
 
-          d.getElementById('modal-editar-paciente').style.display='none';
-          const movNav=[...d.querySelectorAll('.nav-item')].find(x=>String(x.getAttribute('onclick')||'').includes("movimentacao"));
-          if(typeof w.switchTab==='function')w.switchTab('movimentacao',movNav||null);
+          if(!nome||!nasc||!perfil||!sexo||!origem){w.alert('Antes de executar a ação, complete Nome, Data de Nascimento, Sexo, Perfil e Setor/Unidade de Origem.');return null;}
+          if(atual&&!perfilCompativel(atual.s.nome,perfil)){w.alert(msgConflito(atual.s.nome,perfil));return null;}
+          if(acao!=='Reservado'&&!informado&&isTemp(oldPr)){
+            w.alert('Para confirmar esta ação, informe primeiro o número definitivo do prontuário do paciente.');
+            return null;
+          }
+
+          let finalPr=informado||oldPr;
+          if(informado&&informado!==oldPr){
+            if(w.basePacientesCadastrados[informado]&&informado!==oldPr){w.alert('Já existe outro paciente com este prontuário.');return null;}
+            const dados={...b,nome,nascimento:nasc,perfil,sexo,convenio:conv,precaucao:prec,origem,prontuarioPendente:false};
+            delete w.basePacientesCadastrados[oldPr];
+            w.basePacientesCadastrados[informado]=dados;
+            w.setoresData.forEach(s=>s.leitos.forEach(l=>{if(l.prontuario===oldPr){l.prontuario=informado;l.paciente=nome;}}));
+            (w.movimentacoesHistorico||[]).forEach(m=>{if(m.atendimento===oldPr){m.atendimento=informado;m.atendimentoNasc='Pront: '+informado+'<br><small>Nasc: '+nasc+'</small>';};});
+            d.getElementById('edit-prontuario').value=informado;
+            finalPr=informado;
+          }
+
+          const atualizado=setorAtualPorPr(finalPr)||atual;
+          if(!atualizado){w.alert('Não foi possível identificar o leito atual deste paciente.');return null;}
 
           const set=(id,val)=>{const el=d.getElementById(id);if(el&&val!==undefined&&val!==null)el.value=val;};
           set('mov-acao',acao);
-          set('mov-atendimento',novoPr||(!isTemp(pr)?pr:''));
+          set('mov-atendimento',isTemp(finalPr)?'':finalPr);
           set('mov-paciente',nome);
           set('mov-nascimento',nasc);
           set('mov-sexo',sexo);
@@ -189,18 +207,55 @@
           set('mov-precaucao',prec);
           set('mov-perfil-vaga',perfil);
           set('mov-origem',origem);
-
-          if(atual){
-            set('mov-setor',atual.s.nome);
-            if(typeof w.atualizarSelectLeitosMov==='function')w.atualizarSelectLeitosMov();
-            set('mov-leito',atual.l.n);
-          }
+          set('mov-setor',atualizado.s.nome);
+          if(typeof w.atualizarSelectLeitosMov==='function')w.atualizarSelectLeitosMov();
+          set('mov-leito',atualizado.l.n);
           if(typeof w.alternarCamposCirurgicosMov==='function')w.alternarCamposCirurgicosMov();
           atualizarRegraProntuario();
-          setTimeout(()=>d.getElementById('box-form-mov')?.scrollIntoView({behavior:'smooth',block:'start'}),50);
+
+          if(irParaTela){
+            d.getElementById('modal-editar-paciente').style.display='none';
+            const movNav=[...d.querySelectorAll('.nav-item')].find(x=>String(x.getAttribute('onclick')||'').includes("movimentacao"));
+            if(typeof w.switchTab==='function')w.switchTab('movimentacao',movNav||null);
+            setTimeout(()=>d.getElementById('box-form-mov')?.scrollIntoView({behavior:'smooth',block:'start'}),50);
+          }
+          return {acao,pr:finalPr,setor:atualizado.s.nome,leito:atualizado.l.n};
+        }
+
+        function abrirAtalhoAcaoOperacional(){prepararAcaoOperacionalPainel(true);}
+
+        async function confirmarAcaoOperacionalPainel(){
+          const info=prepararAcaoOperacionalPainel(false); if(!info)return;
+          if(!w.confirm('Confirmar '+info.acao+' para este paciente no leito '+info.leito+' de '+info.setor+'?'))return;
+          const histAntes=(w.movimentacoesHistorico||[]).length;
+          const statusAntes=setorAtualPorPr(info.pr)?.l?.status||'';
+          try{
+            const ret=w.executarMovimentacaoLeito();
+            if(ret&&typeof ret.then==='function')await ret;
+            await new Promise(r=>setTimeout(r,250));
+          }catch(e){console.error(e);w.alert('Não foi possível executar a ação: '+(e.message||e));return;}
+
+          const histDepois=(w.movimentacoesHistorico||[]).length;
+          let encontrou=false,novoStatus='';
+          for(const s of w.setoresData){for(const l of s.leitos){if(l.prontuario===info.pr){encontrou=true;novoStatus=l.status;}}}
+          const acaoSaida=['Alta Hospitalar','Alta a Pedido','Evasão','Óbito','Transferência Externa','Disponível'].includes(info.acao);
+          const statusOk=acaoSaida ? !encontrou : (info.acao==='Admissão'||info.acao==='Transferência Interna' ? novoStatus==='ocupado' : info.acao==='Reservado'||info.acao==='Reserva Cirúrgica Eletiva' ? novoStatus==='reservado' : info.acao==='Bloqueio' ? novoStatus==='bloqueado' : true);
+          if(histDepois<=histAntes||!statusOk){
+            w.alert('A ação não foi concluída corretamente. Nenhuma alteração foi considerada confirmada. Revise os campos obrigatórios e tente novamente.');
+            return;
+          }
+          if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+          if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+          if(typeof w.atualizarTabelaMovimentacoes==='function')w.atualizarTabelaMovimentacoes();
+          if(typeof w.atualizarTabelaHistoricoGeral==='function')w.atualizarTabelaHistoricoGeral();
+          if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
+          d.getElementById('modal-editar-paciente').style.display='none';
+          w.alert('Ação confirmada. O leito e os históricos foram atualizados com sucesso.');
         }
         const botaoAtalho=d.getElementById('btn-acao-operacional-v4');
         if(botaoAtalho)botaoAtalho.onclick=abrirAtalhoAcaoOperacional;
+        const botaoConfirmar=d.getElementById('btn-confirmar-acao-v5');
+        if(botaoConfirmar)botaoConfirmar.onclick=confirmarAcaoOperacionalPainel;
 
         w.salvarEdicaoPaciente=async function(){
           const oldPr=d.getElementById('edit-prontuario').value;
