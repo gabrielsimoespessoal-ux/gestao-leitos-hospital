@@ -952,19 +952,40 @@
         var indexMovimentoAtual = null;
 
         // --- FUNÇÕES DE SINCRONIZAÇÃO COM FIREBASE ---
+        function serializarDataSegura(valor) {
+            if (!valor) return null;
+            try {
+                if (typeof valor === 'string') return valor;
+                if (valor instanceof Date) return valor.toISOString();
+                if (typeof valor.toDate === 'function') return valor.toDate().toISOString();
+                if (typeof valor.seconds === 'number') return new Date(valor.seconds * 1000).toISOString();
+                var d = new Date(valor);
+                return isNaN(d.getTime()) ? null : d.toISOString();
+            } catch (e) {
+                return null;
+            }
+        }
+
         async function salvarDadosNoFirebase() {
-            if (!window.db) return;
+            if (!window.db) return false;
             try {
                 const { doc, setDoc } = window.firebaseModules;
                 await setDoc(doc(window.db, "hospital", "dados"), {
                     setoresData: setoresData,
-                    movimentacoesHistorico: movimentacoesHistorico.map(m => ({ ...m, dataDesfechoObj: m.dataDesfechoObj ? m.dataDesfechoObj.toISOString() : null, dataAdmissaoObj: m.dataAdmissaoObj ? m.dataAdmissaoObj.toISOString() : null })),
+                    movimentacoesHistorico: movimentacoesHistorico.map(m => ({
+                        ...m,
+                        dataDesfechoObj: serializarDataSegura(m.dataDesfechoObj),
+                        dataAdmissaoObj: serializarDataSegura(m.dataAdmissaoObj)
+                    })),
                     transferenciasAtivas: transferenciasAtivas,
                     transferenciasFinalizadas: transferenciasFinalizadas,
                     basePacientesCadastrados: basePacientesCadastrados
                 });
+                return true;
             } catch (e) {
                 console.error("Erro ao salvar no Firebase: ", e);
+                alert("Não foi possível salvar a alteração no banco de dados. A ação não será considerada concluída.");
+                return false;
             }
         }
 
@@ -978,8 +999,8 @@
                     if (data.movimentacoesHistorico) {
                         movimentacoesHistorico = data.movimentacoesHistorico.map(m => ({
                             ...m,
-                            dataDesfechoObj: m.dataDesfechoObj ? new Date(m.dataDesfechoObj) : null,
-                            dataAdmissaoObj: m.dataAdmissaoObj ? new Date(m.dataAdmissaoObj) : null
+                            dataDesfechoObj: m.dataDesfechoObj ? (typeof m.dataDesfechoObj.toDate === 'function' ? m.dataDesfechoObj.toDate() : new Date(m.dataDesfechoObj)) : null,
+                            dataAdmissaoObj: m.dataAdmissaoObj ? (typeof m.dataAdmissaoObj.toDate === 'function' ? m.dataAdmissaoObj.toDate() : new Date(m.dataAdmissaoObj)) : null
                         }));
                     }
                     if (data.transferenciasAtivas) transferenciasAtivas = data.transferenciasAtivas;
