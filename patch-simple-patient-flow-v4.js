@@ -424,6 +424,58 @@
           return oldConfirmarMudanca?oldConfirmarMudanca.apply(w,arguments):undefined;
         };
 
+        // --- Estrutura do Centro Cirúrgico e SRPA ---
+        async function garantirCentroCirurgicoESRPA(){
+          let alterou=false;
+
+          let cc=(w.setoresData||[]).find(s=>String(s.nome||'').toUpperCase()==='SALAS OPERATÓRIAS');
+          if(!cc){
+            cc={
+              nome:'SALAS OPERATÓRIAS',
+              tipo:'Centro Cirúrgico',
+              leitos:['SALA 01','SALA 02','SALA 03','SALA 04','SALA 05','SALA 06'].map(n=>({n,status:'disponivel',paciente:'',prontuario:''}))
+            };
+            w.setoresData.push(cc);
+            alterou=true;
+          }else{
+            ['SALA 01','SALA 02','SALA 03','SALA 04','SALA 05','SALA 06'].forEach(n=>{
+              if(!cc.leitos.some(l=>String(l.n).toUpperCase()===n)){
+                cc.leitos.push({n,status:'disponivel',paciente:'',prontuario:''});
+                alterou=true;
+              }
+            });
+          }
+
+          let srpa=(w.setoresData||[]).find(s=>String(s.nome||'').toUpperCase()==='SRPA');
+          if(!srpa){
+            srpa={
+              nome:'SRPA',
+              tipo:'Recuperação Pós-Anestésica',
+              leitos:['SRPA 01','SRPA 02','SRPA 03','SRPA 04','SRPA 05','SRPA 06','SRPA 07','SRPA 08'].map(n=>({n,status:'disponivel',paciente:'',prontuario:''}))
+            };
+            w.setoresData.push(srpa);
+            alterou=true;
+          }else{
+            ['SRPA 01','SRPA 02','SRPA 03','SRPA 04','SRPA 05','SRPA 06','SRPA 07','SRPA 08'].forEach(n=>{
+              if(!srpa.leitos.some(l=>String(l.n).toUpperCase()===n)){
+                srpa.leitos.push({n,status:'disponivel',paciente:'',prontuario:''});
+                alterou=true;
+              }
+            });
+          }
+
+          if(alterou){
+            if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+            if(typeof w.atualizarSelectsGerais==='function')w.atualizarSelectsGerais();
+            if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
+            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+          }else{
+            if(typeof w.atualizarSelectsGerais==='function')w.atualizarSelectsGerais();
+          }
+        }
+        setTimeout(garantirCentroCirurgicoESRPA,1200);
+        setTimeout(garantirCentroCirurgicoESRPA,3000);
+
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
