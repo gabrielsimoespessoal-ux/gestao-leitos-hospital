@@ -476,6 +476,188 @@
         setTimeout(garantirCentroCirurgicoESRPA,1200);
         setTimeout(garantirCentroCirurgicoESRPA,3000);
 
+
+        // --- Reserva Cirúrgica com Previsão de Alta ---
+        const acaoPrincipal=d.getElementById('mov-acao');
+        if(acaoPrincipal && ![...acaoPrincipal.options].some(o=>o.value==='Reserva Cirúrgica com Previsão de Alta')){
+          const opt=d.createElement('option');
+          opt.value='Reserva Cirúrgica com Previsão de Alta';
+          opt.textContent='Reserva Cirúrgica com Previsão de Alta';
+          const ref=[...acaoPrincipal.options].find(o=>o.value==='Reserva Cirúrgica Eletiva');
+          if(ref)ref.after(opt);else acaoPrincipal.appendChild(opt);
+        }
+
+        if(!d.getElementById('bloco-prev-alta-v8')){
+          const bloco=d.createElement('div');
+          bloco.id='bloco-prev-alta-v8';
+          bloco.style.cssText='display:none;background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #2563eb;padding:12px;border-radius:7px;margin:0 0 12px';
+          bloco.innerHTML='<strong style="display:block;margin-bottom:8px;color:#1e3a8a">Reserva Cirúrgica com Previsão de Alta</strong><div class="form-grid"><div class="form-group"><label>Previsão de Alta do paciente que ocupa o leito *</label><input type="datetime-local" id="mov-previsao-alta-v8"></div></div><small style="color:#475569">Nesta modalidade, o paciente atual permanece ocupando o leito e um segundo paciente fica reservado para este mesmo leito.</small>';
+          d.getElementById('bloco-campos-cirurgicos')?.before(bloco);
+        }
+
+        const oldAlternarCampos=w.alternarCamposCirurgicosMov;
+        w.alternarCamposCirurgicosMov=function(){
+          if(typeof oldAlternarCampos==='function')oldAlternarCampos.apply(w,arguments);
+          const ac=d.getElementById('mov-acao')?.value;
+          const b=d.getElementById('bloco-prev-alta-v8');
+          if(b)b.style.display=ac==='Reserva Cirúrgica com Previsão de Alta'?'block':'none';
+        };
+
+        async function registrarReservaComPrevisaoAlta(){
+          const setorNome=d.getElementById('mov-setor')?.value;
+          const leitoNum=d.getElementById('mov-leito')?.value;
+          const atendimento=d.getElementById('mov-atendimento')?.value.trim();
+          const paciente=d.getElementById('mov-paciente')?.value.trim();
+          const nascimento=d.getElementById('mov-nascimento')?.value;
+          const perfil=d.getElementById('mov-perfil-vaga')?.value;
+          const sexo=d.getElementById('mov-sexo')?.value;
+          const convenio=d.getElementById('mov-convenio')?.value;
+          const origem=d.getElementById('mov-origem')?.value;
+          const precaucao=d.getElementById('mov-precaucao')?.value;
+          const previsao=d.getElementById('mov-previsao-alta-v8')?.value;
+
+          if(!atendimento||!paciente||!nascimento||!perfil||!sexo||!origem||!previsao){
+            w.alert('Preencha prontuário, nome, nascimento, sexo, perfil, origem e a previsão de alta.');
+            return;
+          }
+          if(!perfilCompativel(setorNome,perfil)){w.alert(msgConflito(setorNome,perfil));return;}
+
+          const setor=(w.setoresData||[]).find(s=>s.nome===setorNome);
+          const leito=setor?.leitos.find(l=>l.n===leitoNum);
+          if(!leito){w.alert('Leito não encontrado.');return;}
+          if(leito.status!=='ocupado'){
+            w.alert('Esta modalidade só pode ser usada em um leito atualmente OCUPADO. Para leito livre, use a reserva normal.');
+            return;
+          }
+          if(leito.prontuario===atendimento){
+            w.alert('O paciente da reserva não pode ser o mesmo paciente que está ocupando o leito.');
+            return;
+          }
+          if(leito.reservaPrevAlta && leito.reservaPrevAlta.prontuario!==atendimento){
+            if(!w.confirm('Este leito já possui uma reserva com previsão de alta para '+leito.reservaPrevAlta.paciente+'. Deseja substituir pela nova reserva?'))return;
+          }
+
+          const agora=new Date();
+          const hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+          const data=agora.toLocaleDateString('pt-BR')+' '+hora;
+          leito.reservaPrevAlta={
+            paciente,
+            prontuario:atendimento,
+            nascimento,
+            perfil,
+            sexo,
+            convenio,
+            origem,
+            precaucao,
+            previsaoAlta:previsao,
+            criadoEm:agora.toISOString(),
+            criadoPor:w.usuarioAtual?.nome||'Usuário'
+          };
+
+          if(!w.basePacientesCadastrados[atendimento])w.basePacientesCadastrados[atendimento]={};
+          Object.assign(w.basePacientesCadastrados[atendimento],{
+            nome:paciente,nascimento,sexo,perfil,convenio,precaucao,origem,
+            reservaComPrevisaoAlta:true
+          });
+
+          w.movimentacoesHistorico.unshift({
+            data,dataIso:agora.toISOString(),hora,
+            atendimentoNasc:'Pront: '+atendimento+'<br><small>Nasc: '+nascimento+'</small>',
+            atendimento,nascimento,paciente,
+            setor:setorNome+' (Leito '+leitoNum+')',
+            origem,destino:setorNome,
+            perfil:perfil+' ('+sexo+')',
+            convenio,
+            acao:'Reserva Cirúrgica com Previsão de Alta<br><small>Leito permanece ocupado por '+(leito.paciente||'paciente atual')+' até '+new Date(previsao).toLocaleString('pt-BR')+'</small>',
+            dataDesfecho:data,dataDesfechoObj:agora,dataAdmissaoObj:agora
+          });
+
+          if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+          if(typeof w.atualizarTabelaMovimentacoes==='function')w.atualizarTabelaMovimentacoes();
+          if(typeof w.atualizarTabelaHistoricoGeral==='function')w.atualizarTabelaHistoricoGeral();
+          if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+
+          ['mov-atendimento','mov-paciente','mov-nascimento','mov-previsao-alta-v8'].forEach(id=>{const el=d.getElementById(id);if(el)el.value='';});
+          const ac=d.getElementById('mov-acao');if(ac)ac.value='';
+          if(typeof w.alternarCamposCirurgicosMov==='function')w.alternarCamposCirurgicosMov();
+          w.alert('Reserva cirúrgica com previsão de alta registrada. O leito continua ocupado e agora também exibe a reserva.');
+        }
+
+        // interceptar a ação especial antes do fluxo original
+        const execAntesReserva=w.executarMovimentacaoLeito;
+        w.executarMovimentacaoLeito=async function(){
+          const ac=d.getElementById('mov-acao')?.value;
+          if(ac==='Reserva Cirúrgica com Previsão de Alta')return registrarReservaComPrevisaoAlta();
+
+          const setorNome=d.getElementById('mov-setor')?.value;
+          const leitoNum=d.getElementById('mov-leito')?.value;
+          const setor=(w.setoresData||[]).find(s=>s.nome===setorNome);
+          const leito=setor?.leitos.find(l=>l.n===leitoNum);
+          const reservaGuardada=leito?.reservaPrevAlta ? {...leito.reservaPrevAlta} : null;
+          const atendimentoAntes=d.getElementById('mov-atendimento')?.value.trim();
+          const r=execAntesReserva.apply(w,arguments);
+          if(r&&typeof r.then==='function')await r;
+
+          // Se o ocupante teve alta/saída, a reserva dupla passa a ser a reserva principal do leito.
+          if(leito && reservaGuardada && ['Alta Hospitalar','Alta a Pedido','Óbito','Evasão','Transferência Externa','Disponível'].includes(ac)){
+            leito.status='reservado';
+            leito.paciente=reservaGuardada.paciente;
+            leito.prontuario=reservaGuardada.prontuario;
+            delete leito.reservaPrevAlta;
+            if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+            if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
+            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+          }
+
+          // Quando o paciente reservado for efetivamente admitido no mesmo leito, encerra o marcador duplo.
+          if(leito && leito.reservaPrevAlta && (ac==='Admissão'||ac==='Transferência Interna') && atendimentoAntes===leito.reservaPrevAlta.prontuario){
+            delete leito.reservaPrevAlta;
+            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+          }
+          return r;
+        };
+
+        function aplicarVisualReservaPrevAlta(){
+          const boxes=[...d.querySelectorAll('#painel-setores-detalhado .sector-box')];
+          boxes.forEach((box,i)=>{
+            const s=w.setoresData?.[i];if(!s)return;
+            const pills=[...box.querySelectorAll('.leito-pill')];
+            pills.forEach((pill,j)=>{
+              const l=s.leitos?.[j];if(!l)return;
+              pill.querySelectorAll('.reserva-prev-alta-v8').forEach(x=>x.remove());
+              if(!l.reservaPrevAlta)return;
+
+              pill.style.background='linear-gradient(90deg,#dc2626 0%,#dc2626 50%,#2563eb 50%,#2563eb 100%)';
+              pill.style.color='#fff';
+              pill.style.minWidth='86px';
+              pill.style.height='58px';
+              pill.style.display='flex';
+              pill.style.alignItems='center';
+              pill.style.justifyContent='center';
+              pill.style.position='relative';
+              pill.style.overflow='hidden';
+              pill.style.padding='3px';
+
+              const info=d.createElement('div');
+              info.className='reserva-prev-alta-v8';
+              info.style.cssText='position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;pointer-events:none;font-size:8px;font-weight:800;line-height:1.05;text-align:center;color:white';
+              const atual=esc(l.paciente||'OCUPADO');
+              const reservado=esc(l.reservaPrevAlta.paciente||'RESERVA');
+              info.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px"><span style="font-size:10px">'+esc(l.n)+'</span><span>'+atual+'</span></div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px"><span>RESERVA</span><span>'+reservado+'</span></div>';
+              pill.appendChild(info);
+              const prev=l.reservaPrevAlta.previsaoAlta?new Date(l.reservaPrevAlta.previsaoAlta).toLocaleString('pt-BR'):'não informada';
+              pill.title='Leito '+l.n+' — OCUPADO: '+(l.paciente||'-')+' | RESERVA: '+(l.reservaPrevAlta.paciente||'-')+' | Previsão de alta: '+prev;
+            });
+          });
+        }
+
+        const renderComReserva=w.renderizarPainelLeitos;
+        w.renderizarPainelLeitos=function(){
+          const r=renderComReserva.apply(w,arguments);
+          setTimeout(aplicarVisualReservaPrevAlta,30);
+          return r;
+        };
+        setTimeout(()=>{if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();},500);
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
