@@ -763,6 +763,131 @@
           return r;
         };
         setTimeout(()=>{if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();},500);
+        // --- Médico digitável e cadastro inteligente persistente ---
+        async function carregarMedicosPersistidosV10(){
+          try{
+            const {doc,getDoc}=w.firebaseModules||{};
+            if(!w.db||!doc||!getDoc)return;
+            const snap=await getDoc(doc(w.db,'hospital','config-medicos'));
+            if(snap.exists()){
+              const data=snap.data();
+              if(Array.isArray(data.medicos)){
+                const base=[...(w.listaMedicosSistema||[])];
+                const mapa=new Map();
+                [...base,...data.medicos].forEach(m=>{
+                  const nome=String(m||'').trim();
+                  if(nome&&!mapa.has(nome.toUpperCase()))mapa.set(nome.toUpperCase(),nome);
+                });
+                w.listaMedicosSistema=[...mapa.values()].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+              }
+            }
+          }catch(e){console.error('Erro ao carregar médicos persistidos:',e);}
+        }
+
+        async function salvarMedicosPersistidosV10(){
+          try{
+            const {doc,setDoc}=w.firebaseModules||{};
+            if(!w.db||!doc||!setDoc)return;
+            await setDoc(doc(w.db,'hospital','config-medicos'),{
+              medicos:[...(w.listaMedicosSistema||[])],
+              atualizadoEm:new Date().toISOString(),
+              atualizadoPor:w.usuarioAtual?.nome||'Usuário'
+            });
+          }catch(e){console.error('Erro ao salvar médicos persistidos:',e);}
+        }
+
+        function normalizarNomeMedicoV10(nome){
+          const n=String(nome||'').trim().replace(/\s+/g,' ');
+          if(!n)return '';
+          return n;
+        }
+
+        function garantirCampoMedicoInteligenteV10(){
+          const select=d.getElementById('mov-medico');
+          if(!select||d.getElementById('mov-medico-texto-v10'))return;
+          const grupo=select.closest('.form-group');
+          const input=d.createElement('input');
+          input.type='text';
+          input.id='mov-medico-texto-v10';
+          input.setAttribute('list','lista-medicos-v10');
+          input.placeholder='Digite ou selecione o nome do médico';
+          input.autocomplete='off';
+          input.style.cssText='width:100%;padding:.55rem;border:1px solid var(--border);border-radius:6px;background:#fff';
+          const dl=d.createElement('datalist');
+          dl.id='lista-medicos-v10';
+          grupo.appendChild(input);
+          grupo.appendChild(dl);
+          select.style.display='none';
+
+          function atualizarDatalist(){
+            dl.innerHTML='';
+            (w.listaMedicosSistema||[]).forEach(m=>{
+              const o=d.createElement('option');o.value=m;dl.appendChild(o);
+            });
+          }
+          atualizarDatalist();
+
+          input.addEventListener('change',async()=>{
+            const nome=normalizarNomeMedicoV10(input.value);
+            if(!nome)return;
+            const existe=(w.listaMedicosSistema||[]).some(m=>String(m).trim().toUpperCase()===nome.toUpperCase());
+            if(!existe){
+              w.listaMedicosSistema.push(nome);
+              w.listaMedicosSistema.sort((a,b)=>a.localeCompare(b,'pt-BR'));
+              await salvarMedicosPersistidosV10();
+              atualizarDatalist();
+            }
+            let opt=[...select.options].find(o=>String(o.value||o.textContent).trim().toUpperCase()===nome.toUpperCase());
+            if(!opt){
+              opt=d.createElement('option');opt.value=nome;opt.textContent=nome;select.appendChild(opt);
+            }
+            select.value=nome;
+          });
+
+          input.addEventListener('input',()=>{
+            select.value=input.value;
+          });
+
+          w.atualizarCampoMedicoInteligenteV10=atualizarDatalist;
+        }
+
+        const oldAtualizarSelectMedicosV10=w.atualizarSelectMedicos;
+        w.atualizarSelectMedicos=function(){
+          if(typeof oldAtualizarSelectMedicosV10==='function')oldAtualizarSelectMedicosV10.apply(w,arguments);
+          garantirCampoMedicoInteligenteV10();
+          if(typeof w.atualizarCampoMedicoInteligenteV10==='function')w.atualizarCampoMedicoInteligenteV10();
+        };
+
+        // garantir que o fluxo cirúrgico use o nome digitado, mesmo se for novo
+        const execMedicoInteligenteV10=w.executarMovimentacaoLeito;
+        w.executarMovimentacaoLeito=async function(){
+          const ac=d.getElementById('mov-acao')?.value;
+          if(ac==='Reserva Cirúrgica Eletiva'){
+            const input=d.getElementById('mov-medico-texto-v10');
+            const select=d.getElementById('mov-medico');
+            const nome=normalizarNomeMedicoV10(input?.value);
+            if(nome){
+              const existe=(w.listaMedicosSistema||[]).some(m=>String(m).trim().toUpperCase()===nome.toUpperCase());
+              if(!existe){
+                w.listaMedicosSistema.push(nome);
+                w.listaMedicosSistema.sort((a,b)=>a.localeCompare(b,'pt-BR'));
+                await salvarMedicosPersistidosV10();
+                if(typeof w.atualizarCampoMedicoInteligenteV10==='function')w.atualizarCampoMedicoInteligenteV10();
+              }
+              let opt=[...select.options].find(o=>String(o.value||o.textContent).trim().toUpperCase()===nome.toUpperCase());
+              if(!opt){opt=d.createElement('option');opt.value=nome;opt.textContent=nome;select.appendChild(opt);}
+              select.value=nome;
+            }
+          }
+          return execMedicoInteligenteV10.apply(w,arguments);
+        };
+
+        setTimeout(async()=>{
+          await carregarMedicosPersistidosV10();
+          if(typeof w.atualizarSelectMedicos==='function')w.atualizarSelectMedicos();
+          garantirCampoMedicoInteligenteV10();
+        },900);
+
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
