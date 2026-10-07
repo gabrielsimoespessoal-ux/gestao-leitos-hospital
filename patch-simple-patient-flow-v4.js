@@ -296,16 +296,121 @@
 
         // --- editar diretamente ao clicar no leito ---
         const oldBedOpen=w.abrirHistoricoPacienteLeito;
+
+        function garantirModalEdicaoReserva(){
+          if(d.getElementById('modal-editar-reserva-v9'))return;
+          const modal=d.createElement('div');
+          modal.id='modal-editar-reserva-v9';
+          modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10020;justify-content:center;align-items:center;padding:16px';
+          modal.innerHTML='<div style="background:white;padding:1.5rem;border-radius:10px;width:620px;max-width:96%;max-height:90vh;overflow:auto;box-shadow:0 10px 35px rgba(0,0,0,.2)">'+
+            '<h3 style="margin:0 0 1rem;color:var(--secondary)">Editar Reserva Cirúrgica com Previsão de Alta</h3>'+
+            '<input type="hidden" id="res-setor-v9"><input type="hidden" id="res-leito-v9">'+
+            '<div class="form-grid">'+
+            '<div class="form-group"><label>Prontuário *</label><input id="res-pr-v9" type="text"></div>'+
+            '<div class="form-group"><label>Nome do paciente reservado *</label><input id="res-nome-v9" type="text"></div>'+
+            '<div class="form-group"><label>Data de nascimento *</label><input id="res-nasc-v9" type="date"></div>'+
+            '<div class="form-group"><label>Sexo *</label><select id="res-sexo-v9"><option value="">Selecione...</option><option>Feminino</option><option>Masculino</option></select></div>'+
+            '<div class="form-group"><label>Perfil / Categoria *</label><select id="res-perfil-v9"><option>Enfermaria Clínica</option><option>Enfermaria Cirúrgica</option><option>UTI Clínica</option><option>UTI Cirúrgica</option><option>Enfermaria Mental</option></select></div>'+
+            '<div class="form-group"><label>Caráter / Convênio</label><select id="res-convenio-v9"><option>SUS</option><option>Particular</option><option>Convênio</option><option>Filantrópico</option></select></div>'+
+            '<div class="form-group"><label>Setor / Unidade de Origem</label><select id="res-origem-v9"></select></div>'+
+            '<div class="form-group"><label>Precaução / Isolamento</label><select id="res-prec-v9"><option value="Nenhuma">Nenhuma (Padrão)</option><option value="Isolamento Contato">Isolamento Contato</option><option value="Isolamento Reverso">Isolamento Reverso</option><option value="Isolamento Gotículas">Isolamento Gotículas</option><option value="Isolamento Aerossóis">Isolamento Aerossóis</option><option value="Isolamento Contato+Gotículas">Contato + Gotículas</option><option value="Isolamento Contato+Aerossóis">Contato + Aerossóis</option></select></div>'+
+            '<div class="form-group" style="grid-column:1/-1"><label>Previsão de alta do paciente que ocupa o leito *</label><input id="res-prev-v9" type="datetime-local"></div>'+
+            '</div>'+
+            '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:1rem"><button class="btn" id="res-cancel-v9">Cancelar</button><button class="btn btn-success" id="res-save-v9">Salvar reserva</button></div>'+
+            '</div>';
+          d.body.appendChild(modal);
+          const origem=d.getElementById('res-origem-v9');
+          origem.innerHTML='<option value="">Selecione origem...</option>';
+          [...(w.unidadesOrigemDestino||[]),...(w.setoresData||[]).map(s=>s.nome)].forEach(x=>{
+            const o=d.createElement('option');o.value=x;o.textContent=x;origem.appendChild(o);
+          });
+          d.getElementById('res-cancel-v9').onclick=()=>modal.style.display='none';
+          d.getElementById('res-save-v9').onclick=async()=>{
+            const setor=d.getElementById('res-setor-v9').value;
+            const leito=d.getElementById('res-leito-v9').value;
+            const s=w.setoresData.find(x=>x.nome===setor),l=s?.leitos.find(x=>x.n===leito);
+            if(!l?.reservaPrevAlta){w.alert('Reserva não encontrada neste leito.');modal.style.display='none';return;}
+            const antigoPr=l.reservaPrevAlta.prontuario;
+            const pr=d.getElementById('res-pr-v9').value.trim();
+            const nome=d.getElementById('res-nome-v9').value.trim();
+            const nasc=d.getElementById('res-nasc-v9').value;
+            const sexo=d.getElementById('res-sexo-v9').value;
+            const perfil=d.getElementById('res-perfil-v9').value;
+            const convenio=d.getElementById('res-convenio-v9').value;
+            const origemVal=d.getElementById('res-origem-v9').value;
+            const prec=d.getElementById('res-prec-v9').value;
+            const prev=d.getElementById('res-prev-v9').value;
+            if(!pr||!nome||!nasc||!sexo||!perfil||!origemVal||!prev){w.alert('Preencha todos os campos obrigatórios da reserva.');return;}
+            if(!perfilCompativel(setor,perfil)){w.alert(msgConflito(setor,perfil));return;}
+            if(pr!==antigoPr && w.basePacientesCadastrados?.[pr]){
+              const e=w.basePacientesCadastrados[pr];
+              const norm=x=>String(x||'').trim().toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+              if(norm(e.nome)!==norm(nome)){w.alert('Este prontuário já pertence a outro paciente: '+(e.nome||'cadastro existente')+'.');return;}
+            }
+            l.reservaPrevAlta={...l.reservaPrevAlta,paciente:nome,prontuario:pr,nascimento:nasc,sexo,perfil,convenio,origem:origemVal,precaucao:prec,previsaoAlta:prev,atualizadoEm:new Date().toISOString(),atualizadoPor:w.usuarioAtual?.nome||'Usuário'};
+            const baseAntiga=getBase(antigoPr);
+            if(pr!==antigoPr && w.basePacientesCadastrados?.[antigoPr]){
+              delete w.basePacientesCadastrados[antigoPr];
+            }
+            if(!w.basePacientesCadastrados[pr])w.basePacientesCadastrados[pr]={};
+            Object.assign(w.basePacientesCadastrados[pr],baseAntiga,{nome,nascimento:nasc,sexo,perfil,convenio,origem:origemVal,precaucao:prec,reservaComPrevisaoAlta:true});
+            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+            if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+            modal.style.display='none';
+            d.getElementById('modal-historico-paciente').style.display='none';
+            w.alert('Reserva atualizada com sucesso.');
+          };
+        }
+
+        w.editarReservaPrevAltaV9=function(setor,leito){
+          garantirModalEdicaoReserva();
+          const s=w.setoresData.find(x=>x.nome===setor),l=s?.leitos.find(x=>x.n===leito);
+          const r=l?.reservaPrevAlta;if(!r){w.alert('Este leito não possui reserva com previsão de alta.');return;}
+          d.getElementById('res-setor-v9').value=setor;
+          d.getElementById('res-leito-v9').value=leito;
+          d.getElementById('res-pr-v9').value=r.prontuario||'';
+          d.getElementById('res-nome-v9').value=r.paciente||'';
+          d.getElementById('res-nasc-v9').value=r.nascimento||'';
+          d.getElementById('res-sexo-v9').value=r.sexo||'';
+          d.getElementById('res-perfil-v9').value=r.perfil||'Enfermaria Clínica';
+          d.getElementById('res-convenio-v9').value=r.convenio||'SUS';
+          d.getElementById('res-origem-v9').value=r.origem||'';
+          d.getElementById('res-prec-v9').value=r.precaucao||'Nenhuma';
+          d.getElementById('res-prev-v9').value=r.previsaoAlta||'';
+          d.getElementById('modal-editar-reserva-v9').style.display='flex';
+        };
+
         w.abrirHistoricoPacienteLeito=function(setor,leito){
           oldBedOpen.call(w,setor,leito);
           const s=w.setoresData.find(x=>x.nome===setor),l=s?.leitos.find(x=>x.n===leito);
-          if(!l||!l.prontuario||!(l.status==='ocupado'||l.status==='reservado'))return;
+          if(!l||!(l.status==='ocupado'||l.status==='reservado'))return;
           const cont=d.getElementById('paciente-modal-conteudo'); if(!cont)return;
-          if(cont.querySelector('#editar-paciente-leito-v3'))return;
-          const b=getBase(l.prontuario);
-          const btn=d.createElement('button');btn.id='editar-paciente-leito-v3';btn.className='btn';btn.style.margin='12px 8px 0 0';btn.textContent='✏️ Editar cadastro do paciente';
-          btn.onclick=()=>{d.getElementById('modal-historico-paciente').style.display='none';w.abrirEdicaoPaciente(l.prontuario,l.paciente,b.nascimento||'',b.perfil||'Enfermaria Clínica');};
-          cont.appendChild(btn);
+
+          if(l.prontuario&&!cont.querySelector('#editar-paciente-leito-v3')){
+            const b=getBase(l.prontuario);
+            const btn=d.createElement('button');btn.id='editar-paciente-leito-v3';btn.className='btn';btn.style.margin='12px 8px 0 0';btn.textContent='✏️ Editar cadastro do paciente';
+            btn.onclick=()=>{d.getElementById('modal-historico-paciente').style.display='none';w.abrirEdicaoPaciente(l.prontuario,l.paciente,b.nascimento||'',b.perfil||'Enfermaria Clínica');};
+            cont.appendChild(btn);
+          }
+
+          if(l.reservaPrevAlta&&!cont.querySelector('#reserva-prev-alta-card-v9')){
+            const r=l.reservaPrevAlta;
+            const card=d.createElement('div');
+            card.id='reserva-prev-alta-card-v9';
+            card.style.cssText='margin-top:14px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-left:5px solid #2563eb;border-radius:8px';
+            const prev=r.previsaoAlta?new Date(r.previsaoAlta).toLocaleString('pt-BR'):'Não informada';
+            card.innerHTML='<strong style="display:block;color:#1e3a8a;margin-bottom:7px">🔵 Reserva Cirúrgica com Previsão de Alta</strong>'+
+              '<div><strong>Paciente reservado:</strong> '+esc(r.paciente||'-')+'</div>'+
+              '<div><strong>Prontuário:</strong> '+esc(r.prontuario||'-')+'</div>'+
+              '<div><strong>Data de nascimento:</strong> '+esc(r.nascimento||'-')+'</div>'+
+              '<div><strong>Sexo:</strong> '+esc(r.sexo||'-')+'</div>'+
+              '<div><strong>Perfil:</strong> '+esc(r.perfil||'-')+'</div>'+
+              '<div><strong>Origem:</strong> '+esc(r.origem||'-')+'</div>'+
+              '<div><strong>Previsão de alta do ocupante:</strong> '+esc(prev)+'</div>'+
+              '<button class="btn" id="editar-reserva-prev-v9" style="margin-top:10px;background:#2563eb">✏️ Editar reserva</button>';
+            cont.appendChild(card);
+            card.querySelector('#editar-reserva-prev-v9').onclick=()=>w.editarReservaPrevAltaV9(setor,leito);
+          }
         };
 
         // manter extras/filtros após renderizações
