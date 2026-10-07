@@ -137,6 +137,13 @@
           const bloco=d.createElement('div');
           bloco.innerHTML='<div class="form-group" style="margin-bottom:1rem"><label>Número do Prontuário</label><input type="text" id="edit-prontuario-vis-v3" style="width:100%;padding:.5rem;border:1px solid var(--border);border-radius:6px" placeholder="Inclua quando estiver disponível"></div><div class="form-group" style="margin-bottom:1rem"><label>Sexo</label><select id="edit-sexo-v3" style="width:100%;padding:.5rem;border:1px solid var(--border);border-radius:6px"><option value="">Selecione...</option><option>Feminino</option><option>Masculino</option></select></div><div class="form-group" style="margin-bottom:1rem"><label>Caráter / Convênio</label><select id="edit-convenio-v3" style="width:100%;padding:.5rem;border:1px solid var(--border);border-radius:6px"><option>SUS</option><option>Particular</option><option>Convênio</option><option>Filantrópico</option></select></div><div class="form-group" style="margin-bottom:1rem"><label>Precaução / Isolamento</label><select id="edit-precaucao-v3" style="width:100%;padding:.5rem;border:1px solid var(--border);border-radius:6px"><option value="Nenhuma">Nenhuma (Padrão)</option><option value="Isolamento Contato">Isolamento Contato</option><option value="Isolamento Reverso">Isolamento Reverso</option><option value="Isolamento Gotículas">Isolamento Gotículas</option><option value="Isolamento Aerossóis">Isolamento Aerossóis</option><option value="Isolamento Contato+Gotículas">Contato + Gotículas</option><option value="Isolamento Contato+Aerossóis">Contato + Aerossóis</option></select></div><div class="form-group" style="margin-bottom:1rem"><label>Setor / Unidade de Origem</label><select id="edit-origem-v3" style="width:100%;padding:.5rem;border:1px solid var(--border);border-radius:6px"></select></div>';
           hidden.after(bloco);
+
+          const blocoAcao=d.createElement('div');
+          blocoAcao.id='atalho-acao-operacional-v4';
+          blocoAcao.style.cssText='margin:0 0 1rem;padding:12px;background:#eef6ff;border:1px solid #bfdbfe;border-left:4px solid #0284c7;border-radius:8px';
+          blocoAcao.innerHTML='<label style="display:block;font-size:.8rem;font-weight:700;color:#0f172a;margin-bottom:6px">Ação Operacional — Atalho</label><div style="display:grid;grid-template-columns:1fr auto;gap:8px"><select id="edit-acao-v4" style="width:100%;padding:.55rem;border:1px solid var(--border);border-radius:6px"><option value="">Selecione a ação...</option><option value="Admissão">Admissão</option><option value="Transferência Interna">Transferência Interna</option><option value="Transferência Externa">Transferência Externa</option><option value="Reservado">Reserva Externa / Reserva de Leito</option><option value="Reserva Cirúrgica Eletiva">Reserva Cirúrgica Eletiva</option><option value="Alta Hospitalar">Alta Hospitalar</option><option value="Alta a Pedido">Alta a Pedido</option><option value="Evasão">Evasão</option><option value="Óbito">Óbito</option><option value="Bloqueio">Bloquear Leito / Manutenção</option><option value="Disponível">Liberar Leito</option></select><button type="button" class="btn" id="btn-acao-operacional-v4">Abrir ação</button></div><small style="display:block;margin-top:6px;color:#64748b">Leva os dados deste paciente preenchidos para a tela de movimentação, onde a ação pode ser conferida e executada.</small>';
+          body.querySelector('div[style*="justify-content:flex-end"]')?.before(blocoAcao);
+
           const so=d.getElementById('edit-origem-v3');
           (w.unidadesOrigemDestino||[]).concat((w.setoresData||[]).map(s=>s.nome)).forEach(x=>{const o=d.createElement('option');o.textContent=x;so.appendChild(o);});
         }
@@ -150,7 +157,50 @@
           d.getElementById('edit-convenio-v3').value=b.convenio||'SUS';
           d.getElementById('edit-precaucao-v3').value=b.precaucao||'Nenhuma';
           d.getElementById('edit-origem-v3').value=b.origem||'';
+          const ea=d.getElementById('edit-acao-v4'); if(ea)ea.value='';
         };
+
+        function abrirAtalhoAcaoOperacional(){
+          const acao=d.getElementById('edit-acao-v4')?.value;
+          if(!acao){w.alert('Selecione a Ação Operacional.');return;}
+          const pr=d.getElementById('edit-prontuario').value;
+          const atual=setorAtualPorPr(pr);
+          const b=getBase(pr);
+          const novoPr=(d.getElementById('edit-prontuario-vis-v3')?.value||'').trim();
+          const nome=d.getElementById('edit-nome')?.value||b.nome||'';
+          const nasc=d.getElementById('edit-nasc')?.value||b.nascimento||'';
+          const perfil=d.getElementById('edit-perfil')?.value||b.perfil||'';
+          const sexo=d.getElementById('edit-sexo-v3')?.value||b.sexo||'';
+          const conv=d.getElementById('edit-convenio-v3')?.value||b.convenio||'SUS';
+          const prec=d.getElementById('edit-precaucao-v3')?.value||b.precaucao||'Nenhuma';
+          const origem=d.getElementById('edit-origem-v3')?.value||b.origem||'';
+
+          d.getElementById('modal-editar-paciente').style.display='none';
+          const movNav=[...d.querySelectorAll('.nav-item')].find(x=>String(x.getAttribute('onclick')||'').includes("movimentacao"));
+          if(typeof w.switchTab==='function')w.switchTab('movimentacao',movNav||null);
+
+          const set=(id,val)=>{const el=d.getElementById(id);if(el&&val!==undefined&&val!==null)el.value=val;};
+          set('mov-acao',acao);
+          set('mov-atendimento',novoPr||(!isTemp(pr)?pr:''));
+          set('mov-paciente',nome);
+          set('mov-nascimento',nasc);
+          set('mov-sexo',sexo);
+          set('mov-convenio',conv);
+          set('mov-precaucao',prec);
+          set('mov-perfil-vaga',perfil);
+          set('mov-origem',origem);
+
+          if(atual){
+            set('mov-setor',atual.s.nome);
+            if(typeof w.atualizarSelectLeitosMov==='function')w.atualizarSelectLeitosMov();
+            set('mov-leito',atual.l.n);
+          }
+          if(typeof w.alternarCamposCirurgicosMov==='function')w.alternarCamposCirurgicosMov();
+          atualizarRegraProntuario();
+          setTimeout(()=>d.getElementById('box-form-mov')?.scrollIntoView({behavior:'smooth',block:'start'}),50);
+        }
+        const botaoAtalho=d.getElementById('btn-acao-operacional-v4');
+        if(botaoAtalho)botaoAtalho.onclick=abrirAtalhoAcaoOperacional;
 
         w.salvarEdicaoPaciente=async function(){
           const oldPr=d.getElementById('edit-prontuario').value;
