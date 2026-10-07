@@ -888,6 +888,183 @@
           garantirCampoMedicoInteligenteV10();
         },900);
 
+
+        // --- Reserva com previsão de alta: médico/procedimento obrigatórios + persistência dedicada ---
+        function garantirCamposReservaPrevAltaV11(){
+          const bloco=d.getElementById('bloco-prev-alta-v8');
+          if(bloco&&!d.getElementById('mov-medico-prev-v11')){
+            const grid=bloco.querySelector('.form-grid');
+            const gMed=d.createElement('div');
+            gMed.className='form-group';
+            gMed.innerHTML='<label>Nome do Médico *</label><input id="mov-medico-prev-v11" type="text" list="lista-medicos-prev-v11" placeholder="Digite ou selecione o médico"><datalist id="lista-medicos-prev-v11"></datalist>';
+            const gProc=d.createElement('div');
+            gProc.className='form-group';
+            gProc.innerHTML='<label>Procedimento Proposto *</label><input id="mov-procedimento-prev-v11" type="text" placeholder="Descreva o procedimento">';
+            grid?.prepend(gProc);
+            grid?.prepend(gMed);
+          }
+          atualizarListaMedicosPrevAltaV11();
+        }
+
+        function atualizarListaMedicosPrevAltaV11(){
+          const dl=d.getElementById('lista-medicos-prev-v11');
+          if(!dl)return;
+          dl.innerHTML='';
+          (w.listaMedicosSistema||[]).forEach(m=>{
+            const o=d.createElement('option');o.value=m;dl.appendChild(o);
+          });
+        }
+
+        async function aprenderMedicoV11(nome){
+          const n=normalizarNomeMedicoV10?normalizarNomeMedicoV10(nome):String(nome||'').trim();
+          if(!n)return '';
+          const existe=(w.listaMedicosSistema||[]).some(m=>String(m).trim().toUpperCase()===n.toUpperCase());
+          if(!existe){
+            w.listaMedicosSistema.push(n);
+            w.listaMedicosSistema.sort((a,b)=>a.localeCompare(b,'pt-BR'));
+            if(typeof salvarMedicosPersistidosV10==='function')await salvarMedicosPersistidosV10();
+            if(typeof w.atualizarCampoMedicoInteligenteV10==='function')w.atualizarCampoMedicoInteligenteV10();
+            atualizarListaMedicosPrevAltaV11();
+          }
+          return n;
+        }
+
+        async function persistirReservasPrevAltaV11(){
+          try{
+            const {doc,setDoc}=w.firebaseModules||{};
+            if(!w.db||!doc||!setDoc)return;
+            const reservas={};
+            (w.setoresData||[]).forEach(s=>s.leitos.forEach(l=>{
+              if(l.reservaPrevAlta)reservas[encodeURIComponent(s.nome)+'||'+encodeURIComponent(l.n)]={setor:s.nome,leito:l.n,...l.reservaPrevAlta};
+            }));
+            await setDoc(doc(w.db,'hospital','reservas-prev-alta'),{
+              reservas,
+              atualizadoEm:new Date().toISOString(),
+              atualizadoPor:w.usuarioAtual?.nome||'Usuário'
+            });
+          }catch(e){console.error('Erro ao persistir reservas com previsão de alta:',e);}
+        }
+
+        function aplicarReservasPersistidasV11(reservas){
+          let alterou=false;
+          Object.values(reservas||{}).forEach(r=>{
+            const s=(w.setoresData||[]).find(x=>x.nome===r.setor);
+            const l=s?.leitos.find(x=>x.n===r.leito);
+            if(l){
+              const dados={...r};delete dados.setor;delete dados.leito;
+              l.reservaPrevAlta=dados;
+              alterou=true;
+            }
+          });
+          if(alterou&&typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+        }
+
+        function assinarReservasPrevAltaV11(){
+          try{
+            const {doc,onSnapshot}=w.firebaseModules||{};
+            if(!w.db||!doc||!onSnapshot)return;
+            onSnapshot(doc(w.db,'hospital','reservas-prev-alta'),snap=>{
+              if(snap.exists())aplicarReservasPersistidasV11(snap.data()?.reservas||{});
+            });
+          }catch(e){console.error('Erro ao sincronizar reservas com previsão de alta:',e);}
+        }
+
+        garantirCamposReservaPrevAltaV11();
+        setTimeout(garantirCamposReservaPrevAltaV11,1000);
+        setTimeout(assinarReservasPrevAltaV11,1300);
+
+        // intercepta e completa o cadastro especial com médico e procedimento
+        const execPrevAltaV11=w.executarMovimentacaoLeito;
+        w.executarMovimentacaoLeito=async function(){
+          const ac=d.getElementById('mov-acao')?.value;
+          if(ac!=='Reserva Cirúrgica com Previsão de Alta')return execPrevAltaV11.apply(w,arguments);
+
+          garantirCamposReservaPrevAltaV11();
+          const medico=await aprenderMedicoV11(d.getElementById('mov-medico-prev-v11')?.value);
+          const procedimento=String(d.getElementById('mov-procedimento-prev-v11')?.value||'').trim();
+          if(!medico||!procedimento){
+            w.alert('Na Reserva Cirúrgica com Previsão de Alta, Nome do Médico e Procedimento Proposto são obrigatórios.');
+            return;
+          }
+
+          const setorNome=d.getElementById('mov-setor')?.value;
+          const leitoNum=d.getElementById('mov-leito')?.value;
+          const pacienteReserva=d.getElementById('mov-paciente')?.value.trim();
+          const r=execPrevAltaV11.apply(w,arguments);
+          if(r&&typeof r.then==='function')await r;
+
+          const setor=(w.setoresData||[]).find(s=>s.nome===setorNome);
+          const leito=setor?.leitos.find(l=>l.n===leitoNum);
+          if(leito?.reservaPrevAlta){
+            leito.reservaPrevAlta.medico=medico;
+            leito.reservaPrevAlta.procedimento=procedimento;
+            const hist=(w.movimentacoesHistorico||[]).find(m=>m.paciente===pacienteReserva&&String(m.acao||'').includes('Reserva Cirúrgica com Previsão de Alta'));
+            if(hist&&!String(hist.acao||'').includes('Médico:')){
+              hist.acao=String(hist.acao||'')+'<br><small>Médico: '+medico+' | Procedimento: '+procedimento+'</small>';
+            }
+            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+            await persistirReservasPrevAltaV11();
+            if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+          }
+          const mi=d.getElementById('mov-medico-prev-v11');if(mi)mi.value='';
+          const pi=d.getElementById('mov-procedimento-prev-v11');if(pi)pi.value='';
+          return r;
+        };
+
+        // completar modal de edição da reserva
+        const oldGarantirModalReservaV11=w.editarReservaPrevAltaV9;
+        w.editarReservaPrevAltaV9=function(setor,leito){
+          if(typeof oldGarantirModalReservaV11==='function')oldGarantirModalReservaV11.call(w,setor,leito);
+          const modal=d.getElementById('modal-editar-reserva-v9');
+          if(!modal)return;
+          const r=w.setoresData.find(x=>x.nome===setor)?.leitos.find(x=>x.n===leito)?.reservaPrevAlta;
+          const grid=modal.querySelector('.form-grid');
+          if(grid&&!d.getElementById('res-medico-v11')){
+            const gm=d.createElement('div');gm.className='form-group';
+            gm.innerHTML='<label>Nome do Médico *</label><input id="res-medico-v11" type="text" list="lista-medicos-res-v11" placeholder="Digite ou selecione"><datalist id="lista-medicos-res-v11"></datalist>';
+            const gp=d.createElement('div');gp.className='form-group';
+            gp.innerHTML='<label>Procedimento Proposto *</label><input id="res-procedimento-v11" type="text" placeholder="Descreva o procedimento">';
+            grid.appendChild(gm);grid.appendChild(gp);
+          }
+          const dl=d.getElementById('lista-medicos-res-v11');
+          if(dl){dl.innerHTML='';(w.listaMedicosSistema||[]).forEach(m=>{const o=d.createElement('option');o.value=m;dl.appendChild(o);});}
+          if(d.getElementById('res-medico-v11'))d.getElementById('res-medico-v11').value=r?.medico||'';
+          if(d.getElementById('res-procedimento-v11'))d.getElementById('res-procedimento-v11').value=r?.procedimento||'';
+
+          const btn=d.getElementById('res-save-v9');
+          if(btn&&!btn.dataset.v11){
+            btn.dataset.v11='1';
+            const antigo=btn.onclick;
+            btn.onclick=async()=>{
+              const med=await aprenderMedicoV11(d.getElementById('res-medico-v11')?.value);
+              const proc=String(d.getElementById('res-procedimento-v11')?.value||'').trim();
+              if(!med||!proc){w.alert('Nome do Médico e Procedimento Proposto são obrigatórios.');return;}
+              const sNome=d.getElementById('res-setor-v9').value;
+              const lNum=d.getElementById('res-leito-v9').value;
+              if(typeof antigo==='function'){
+                const rr=antigo();
+                if(rr&&typeof rr.then==='function')await rr;
+              }
+              const l=w.setoresData.find(x=>x.nome===sNome)?.leitos.find(x=>x.n===lNum);
+              if(l?.reservaPrevAlta){
+                l.reservaPrevAlta.medico=med;
+                l.reservaPrevAlta.procedimento=proc;
+                if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+                await persistirReservasPrevAltaV11();
+              }
+            };
+          }
+        };
+
+        // persistir remoções/transições da reserva especial também
+        const oldSalvarGeralV11=w.salvarDadosNoFirebase;
+        w.salvarDadosNoFirebase=async function(){
+          const r=oldSalvarGeralV11.apply(w,arguments);
+          if(r&&typeof r.then==='function')await r;
+          // não dispara em loop: grava somente o espelho das reservas atuais
+          await persistirReservasPrevAltaV11();
+          return r;
+        };
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
