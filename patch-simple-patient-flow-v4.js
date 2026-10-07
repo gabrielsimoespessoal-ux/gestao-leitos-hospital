@@ -52,11 +52,12 @@
           const pr=d.getElementById('mov-atendimento');
           const sp=d.getElementById('regra-prontuario-v3');
           if(!pr)return;
-          if(ac==='Reservado'){
-            pr.required=false; pr.placeholder='Opcional na Reserva Externa — incluir quando disponível';
-            if(sp)sp.textContent='(opcional na Reserva Externa)';
+          const ehReserva=['Reservado','Reserva Cirúrgica Eletiva','Reserva Cirúrgica com Previsão de Alta'].includes(ac);
+          if(ehReserva){
+            pr.required=false; pr.placeholder='Opcional em qualquer reserva — obrigatório somente ao efetivar ocupação';
+            if(sp)sp.textContent='(opcional na reserva; obrigatório ao ocupar o leito)';
           }else{
-            pr.required=true; pr.placeholder='Digite o nº — se já existir, o cadastro será preenchido';
+            pr.required=true; pr.placeholder='Digite o nº — obrigatório para ocupação/movimentação do paciente';
             if(sp)sp.textContent='(obrigatório)';
           }
         }
@@ -109,8 +110,9 @@
           if(!perfilCompativel(setor,perfil)){w.alert(msgConflito(setor,perfil));return;}
           const pr=d.getElementById('mov-atendimento');
           let gerado=false;
-          if(ac==='Reservado'&&!pr.value.trim()){pr.value='EXT-'+Date.now();gerado=true;}
-          if(ac!=='Reservado'&&!pr.value.trim()){w.alert('Informe o número do prontuário. Para Reserva Externa esse campo pode ficar vazio.');return;}
+          const ehReserva=['Reservado','Reserva Cirúrgica Eletiva','Reserva Cirúrgica com Previsão de Alta'].includes(ac);
+          if(ehReserva&&!pr.value.trim()){pr.value='RES-'+Date.now();gerado=true;}
+          if(!ehReserva&&!pr.value.trim()){w.alert('Informe o número do prontuário. Ele é opcional apenas durante uma reserva e obrigatório para efetivar a ocupação do leito.');return;}
           const chave=pr.value.trim();
           const pac=d.getElementById('mov-paciente')?.value.trim();
           const nasc=d.getElementById('mov-nascimento')?.value;
@@ -121,7 +123,7 @@
           const r=oldExec.apply(w,arguments);
           setTimeout(()=>{
             if(w.basePacientesCadastrados[chave]){
-              Object.assign(w.basePacientesCadastrados[chave],{nome:pac,nascimento:nasc,sexo,perfil,convenio:conv,precaucao:prec,origem,reservaExterna:ac==='Reservado',prontuarioPendente:gerado});
+              Object.assign(w.basePacientesCadastrados[chave],{nome:pac,nascimento:nasc,sexo,perfil,convenio:conv,precaucao:prec,origem,reservaExterna:ac==='Reservado',tipoReserva:ehReserva?ac:'',prontuarioPendente:gerado});
               if(typeof w.salvarDadosNoFirebase==='function')w.salvarDadosNoFirebase();
             }
           },0);
@@ -512,21 +514,64 @@
         };
 
         const oldConfirmarMudanca=w.confirmarMudancaLeitoModal;
-        w.confirmarMudancaLeitoModal=function(){
+        w.confirmarMudancaLeitoModal=async function(){
           const idx=w.indexMovimentoAtual;
           const m=(w.movimentacoesHistorico||[])[idx];
           const valor=d.getElementById('modal-select-novo-leito')?.value;
           const acao=d.getElementById('modal-acao-leito')?.value;
+
           if(m&&valor&&acao==='ocupado'){
+            let prontuarioAtual=String(m.atendimento||'').trim();
+
+            // Reservas sem prontuário usam chave temporária RES-/EXT-.
+            // Ao efetivar ocupação, obrigatoriamente solicita o prontuário real.
+            if(!prontuarioAtual || isTemp(prontuarioAtual) || prontuarioAtual.startsWith('RES-')){
+              const novo=String(w.prompt('Para EFETIVAR A OCUPAÇÃO do leito, informe obrigatoriamente o número definitivo do prontuário deste paciente:')||'').trim();
+              if(!novo){
+                w.alert('O prontuário é obrigatório para efetivar a ocupação. A reserva foi mantida e nenhuma ocupação foi realizada.');
+                return;
+              }
+
+              const existente=w.basePacientesCadastrados?.[novo];
+              const norm=x=>String(x||'').trim().toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+              if(existente && norm(existente.nome)!==norm(m.paciente)){
+                w.alert('O prontuário informado já pertence a outro paciente: '+(existente.nome||'cadastro existente')+'.');
+                return;
+              }
+
+              const antigo=prontuarioAtual;
+              const dadosAntigos=w.basePacientesCadastrados?.[antigo]||{};
+              w.basePacientesCadastrados[novo]={...(existente||{}),...dadosAntigos,nome:m.paciente,nascimento:m.nascimento||dadosAntigos.nascimento||'',prontuarioPendente:false};
+              if(antigo&&w.basePacientesCadastrados?.[antigo])delete w.basePacientesCadastrados[antigo];
+
+              // Migra todos os vínculos da chave temporária para o prontuário real.
+              (w.setoresData||[]).forEach(s=>s.leitos.forEach(l=>{
+                if(l.prontuario===antigo){l.prontuario=novo;l.paciente=m.paciente;}
+                if(l.reservaPrevAlta?.prontuario===antigo)l.reservaPrevAlta.prontuario=novo;
+              }));
+              (w.movimentacoesHistorico||[]).forEach(mm=>{
+                if(mm.atendimento===antigo){
+                  mm.atendimento=novo;
+                  mm.atendimentoNasc='Pront: '+novo+'<br><small>Nasc: '+(mm.nascimento||m.nascimento||'-')+'</small>';
+                }
+              });
+              m.atendimento=novo;
+              prontuarioAtual=novo;
+            }
+
             const partes=valor.split('||');
             // Ao efetivar ocupação, remove outras reservas do MESMO paciente para evitar duplicidade.
             (w.setoresData||[]).forEach(s=>s.leitos.forEach(l=>{
-              const mesmaReserva=l.status==='reservado'&&((m.atendimento&&l.prontuario===m.atendimento)||(m.paciente&&String(l.paciente||'').trim().toUpperCase()===String(m.paciente||'').trim().toUpperCase()));
+              const mesmaReserva=l.status==='reservado'&&((prontuarioAtual&&l.prontuario===prontuarioAtual)||(m.paciente&&String(l.paciente||'').trim().toUpperCase()===String(m.paciente||'').trim().toUpperCase()));
               const selecionado=s.nome===partes[0]&&l.n===partes[1];
               if(mesmaReserva&&!selecionado){l.status='disponivel';l.paciente='';l.prontuario='';}
             }));
           }
-          return oldConfirmarMudanca?oldConfirmarMudanca.apply(w,arguments):undefined;
+
+          const r=oldConfirmarMudanca?oldConfirmarMudanca.apply(w,arguments):undefined;
+          if(r&&typeof r.then==='function')await r;
+          if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+          return r;
         };
 
         // --- Estrutura do Centro Cirúrgico e SRPA ---
