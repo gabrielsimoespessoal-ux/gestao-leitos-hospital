@@ -1321,6 +1321,129 @@
 
         const btnConfirmarV13=d.getElementById('btn-confirmar-acao-v5');
         if(btnConfirmarV13)btnConfirmarV13.onclick=confirmarAcaoPainelV13;
+
+        // --- Previsão de alta opcional para todos os pacientes ---
+        function garantirCampoPrevisaoAltaV14(){
+          const modal=d.getElementById('modal-editar-paciente');
+          if(modal&&!d.getElementById('edit-previsao-alta-v14')){
+            const body=modal.firstElementChild;
+            const blocoAcao=d.getElementById('atalho-acao-operacional-v4');
+            const wrap=d.createElement('div');
+            wrap.className='form-group';
+            wrap.style.marginBottom='1rem';
+            wrap.innerHTML='<label>Previsão de Alta <span style="font-weight:400;color:#64748b">(opcional)</span></label><input type="datetime-local" id="edit-previsao-alta-v14" style="width:100%;padding:.5rem;border:1px solid var(--border);border-radius:6px">';
+            if(blocoAcao)blocoAcao.before(wrap);else body?.appendChild(wrap);
+          }
+
+          const formMov=d.querySelector('#box-form-mov .form-grid');
+          if(formMov&&!d.getElementById('mov-previsao-alta-paciente-v14')){
+            const g=d.createElement('div');
+            g.className='form-group';
+            g.innerHTML='<label>Previsão de Alta <span style="font-weight:400;color:#64748b">(opcional)</span></label><input type="datetime-local" id="mov-previsao-alta-paciente-v14">';
+            formMov.appendChild(g);
+          }
+        }
+
+        const abrirEdicaoAntesV14=w.abrirEdicaoPaciente;
+        w.abrirEdicaoPaciente=function(pr,nome,nasc,perfil){
+          garantirCampoPrevisaoAltaV14();
+          const r=abrirEdicaoAntesV14.apply(w,arguments);
+          const b=w.basePacientesCadastrados?.[pr]||{};
+          const el=d.getElementById('edit-previsao-alta-v14');
+          if(el)el.value=b.previsaoAlta||'';
+          return r;
+        };
+
+        const salvarEdicaoAntesV14=w.salvarEdicaoPaciente;
+        w.salvarEdicaoPaciente=async function(){
+          const prAntigo=d.getElementById('edit-prontuario')?.value||'';
+          const prNovo=(d.getElementById('edit-prontuario-vis-v3')?.value||'').trim()||prAntigo;
+          const previsao=d.getElementById('edit-previsao-alta-v14')?.value||'';
+          const r=salvarEdicaoAntesV14.apply(w,arguments);
+          if(r&&typeof r.then==='function')await r;
+          const chave=w.basePacientesCadastrados?.[prNovo]?prNovo:prAntigo;
+          if(chave&&w.basePacientesCadastrados?.[chave]){
+            w.basePacientesCadastrados[chave].previsaoAlta=previsao;
+            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+            if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+          }
+          return r;
+        };
+
+        const execAntesPrevAltaPacienteV14=w.executarMovimentacaoLeito;
+        w.executarMovimentacaoLeito=async function(){
+          garantirCampoPrevisaoAltaV14();
+          const pr=d.getElementById('mov-atendimento')?.value.trim();
+          const previsao=d.getElementById('mov-previsao-alta-paciente-v14')?.value||'';
+          const r=execAntesPrevAltaPacienteV14.apply(w,arguments);
+          if(r&&typeof r.then==='function')await r;
+          if(pr&&w.basePacientesCadastrados?.[pr]){
+            w.basePacientesCadastrados[pr].previsaoAlta=previsao;
+            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+            if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+          }
+          return r;
+        };
+
+        function formatarPrevAltaV14(v){
+          if(!v)return '';
+          const dt=new Date(v);
+          if(isNaN(dt))return String(v);
+          return dt.toLocaleString('pt-BR');
+        }
+
+        function aplicarPrevisaoAltaNoPainelV14(){
+          const boxes=[...d.querySelectorAll('#painel-setores-detalhado .sector-box')];
+          boxes.forEach((box,i)=>{
+            const s=w.setoresData?.[i];if(!s)return;
+            const pills=[...box.querySelectorAll('.leito-pill')];
+            pills.forEach((pill,j)=>{
+              const l=s.leitos?.[j];if(!l)return;
+              pill.querySelectorAll('.prev-alta-badge-v14').forEach(x=>x.remove());
+              if(l.status!=='ocupado'||!l.prontuario)return;
+              const b=w.basePacientesCadastrados?.[l.prontuario];
+              if(!b?.previsaoAlta)return;
+              pill.style.position='relative';
+              pill.style.overflow='visible';
+              const badge=d.createElement('span');
+              badge.className='prev-alta-badge-v14';
+              badge.textContent='ALTA';
+              badge.title='Previsão de alta: '+formatarPrevAltaV14(b.previsaoAlta);
+              badge.style.cssText='position:absolute;left:-6px;bottom:-12px;background:#f59e0b;color:#111827;border:2px solid #fff;border-radius:999px;padding:2px 5px;font-size:8px;font-weight:900;z-index:6;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.2)';
+              pill.appendChild(badge);
+              const info='Previsão de alta: '+formatarPrevAltaV14(b.previsaoAlta);
+              if(!String(pill.title||'').includes('Previsão de alta'))pill.title=(pill.title?pill.title+' — ':'')+info;
+            });
+          });
+        }
+
+        const renderAntesPrevAltaV14=w.renderizarPainelLeitos;
+        w.renderizarPainelLeitos=function(){
+          const r=renderAntesPrevAltaV14.apply(w,arguments);
+          setTimeout(aplicarPrevisaoAltaNoPainelV14,70);
+          return r;
+        };
+
+        const abrirLeitoAntesPrevAltaV14=w.abrirHistoricoPacienteLeito;
+        w.abrirHistoricoPacienteLeito=function(setor,leito){
+          const r=abrirLeitoAntesPrevAltaV14.apply(w,arguments);
+          const s=w.setoresData.find(x=>x.nome===setor),l=s?.leitos.find(x=>x.n===leito);
+          if(!l?.prontuario)return r;
+          const b=w.basePacientesCadastrados?.[l.prontuario];
+          const cont=d.getElementById('paciente-modal-conteudo');
+          if(b?.previsaoAlta&&cont&&!cont.querySelector('#prev-alta-detalhe-v14')){
+            const div=d.createElement('div');
+            div.id='prev-alta-detalhe-v14';
+            div.style.cssText='margin:10px 0;padding:10px;background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #f59e0b;border-radius:7px';
+            div.innerHTML='<strong>📅 Previsão de alta:</strong> '+esc(formatarPrevAltaV14(b.previsaoAlta));
+            cont.prepend(div);
+          }
+          return r;
+        };
+
+        garantirCampoPrevisaoAltaV14();
+        setTimeout(garantirCampoPrevisaoAltaV14,1000);
+        setTimeout(()=>{if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();},1200);
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
