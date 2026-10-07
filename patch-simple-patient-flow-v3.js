@@ -184,8 +184,14 @@
 
           let finalPr=informado||oldPr;
           if(informado&&informado!==oldPr){
-            if(w.basePacientesCadastrados[informado]&&informado!==oldPr){w.alert('Já existe outro paciente com este prontuário.');return null;}
-            const dados={...b,nome,nascimento:nasc,perfil,sexo,convenio:conv,precaucao:prec,origem,prontuarioPendente:false};
+            const existente=w.basePacientesCadastrados[informado];
+            const normaliza=x=>String(x||'').trim().toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+            const mesmoPaciente=!!existente && normaliza(existente.nome)===normaliza(nome) && (!existente.nascimento||!nasc||String(existente.nascimento)===String(nasc));
+            if(existente&&!mesmoPaciente){
+              w.alert('Este prontuário já pertence a outro paciente: '+(existente.nome||'cadastro existente')+'. Confira o número informado.');
+              return null;
+            }
+            const dados={...(existente||{}),...b,nome,nascimento:nasc,perfil,sexo,convenio:conv,precaucao:prec,origem,prontuarioPendente:false};
             delete w.basePacientesCadastrados[oldPr];
             w.basePacientesCadastrados[informado]=dados;
             w.setoresData.forEach(s=>s.leitos.forEach(l=>{if(l.prontuario===oldPr){l.prontuario=informado;l.paciente=nome;}}));
@@ -270,9 +276,12 @@
           if(!nome){w.alert('Informe o nome completo do paciente.');return;}
           const atual=setorAtualPorPr(oldPr);
           if(atual&&!perfilCompativel(atual.s.nome,perfil)){w.alert(msgConflito(atual.s.nome,perfil));return;}
-          if(newPr!==oldPr&&w.basePacientesCadastrados[newPr]&&!isTemp(oldPr)){w.alert('Já existe outro paciente cadastrado com este prontuário.');return;}
           const antigo=getBase(oldPr);
-          const dados={...antigo,nome,nascimento:nasc,perfil,sexo,convenio,precaucao,origem,prontuarioPendente:isTemp(newPr)};
+          const existenteDestino=newPr!==oldPr?w.basePacientesCadastrados[newPr]:null;
+          const normaliza=x=>String(x||'').trim().toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+          const mesmoPacienteDestino=!!existenteDestino && normaliza(existenteDestino.nome)===normaliza(nome) && (!existenteDestino.nascimento||!nasc||String(existenteDestino.nascimento)===String(nasc));
+          if(newPr!==oldPr&&existenteDestino&&!mesmoPacienteDestino){w.alert('Este prontuário já pertence a outro paciente: '+(existenteDestino.nome||'cadastro existente')+'.');return;}
+          const dados={...(existenteDestino||{}),...antigo,nome,nascimento:nasc,perfil,sexo,convenio,precaucao,origem,prontuarioPendente:isTemp(newPr)};
           if(newPr!==oldPr){delete w.basePacientesCadastrados[oldPr];w.basePacientesCadastrados[newPr]=dados;}
           else w.basePacientesCadastrados[oldPr]=dados;
           w.setoresData.forEach(s=>s.leitos.forEach(l=>{if(l.prontuario===oldPr){l.prontuario=newPr;l.paciente=nome;}}));
