@@ -1065,6 +1065,100 @@
           await persistirReservasPrevAltaV11();
           return r;
         };
+
+        // --- Resumo geral de ocupação no rodapé do Painel de Leitos ---
+        function calcularResumoOcupacaoV12(){
+          const resumo={
+            total:0,ocupados:0,disponiveis:0,bloqueados:0,reservados:0,higienizacao:0,
+            utiTotal:0,utiOcupados:0,utiDisponiveis:0,
+            sexo:{Feminino:0,Masculino:0,'Não informado':0},
+            especialidades:{}
+          };
+          (w.setoresData||[]).forEach(s=>{
+            const ehUti=String(s.tipo||'').toUpperCase()==='UTI'||String(s.nome||'').toUpperCase().includes('UTI');
+            s.leitos.forEach(l=>{
+              resumo.total++;
+              if(ehUti)resumo.utiTotal++;
+              if(l.status==='ocupado'){
+                resumo.ocupados++;
+                if(ehUti)resumo.utiOcupados++;
+                const b=l.prontuario?w.basePacientesCadastrados?.[l.prontuario]:null;
+                const sexo=String(b?.sexo||'').toLowerCase();
+                if(sexo.includes('femin'))resumo.sexo.Feminino++;
+                else if(sexo.includes('mascul'))resumo.sexo.Masculino++;
+                else resumo.sexo['Não informado']++;
+
+                const esp=String(b?.especialidade||b?.perfil||'Não informado').trim()||'Não informado';
+                resumo.especialidades[esp]=(resumo.especialidades[esp]||0)+1;
+              }else if(l.status==='disponivel'){
+                resumo.disponiveis++;
+                if(ehUti)resumo.utiDisponiveis++;
+              }else if(l.status==='bloqueado')resumo.bloqueados++;
+              else if(l.status==='reservado')resumo.reservados++;
+              else if(l.status==='higienizacao')resumo.higienizacao++;
+            });
+          });
+          return resumo;
+        }
+
+        function renderResumoOcupacaoV12(){
+          const painel=d.getElementById('painel');
+          const container=d.getElementById('painel-setores-detalhado');
+          if(!painel||!container)return;
+          let box=d.getElementById('resumo-ocupacao-v12');
+          if(!box){
+            box=d.createElement('div');
+            box.id='resumo-ocupacao-v12';
+            box.style.cssText='margin-top:18px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px;box-shadow:0 2px 8px rgba(15,23,42,.05)';
+            container.after(box);
+          }
+          const r=calcularResumoOcupacaoV12();
+          const ocupPct=r.total?Math.round((r.ocupados/r.total)*100):0;
+          const utiPct=r.utiTotal?Math.round((r.utiOcupados/r.utiTotal)*100):0;
+          const espEntries=Object.entries(r.especialidades).sort((a,b)=>b[1]-a[1]);
+
+          const cards=[
+            ['Ocupação total',ocupPct+'%'],
+            ['Leitos totais',r.total],
+            ['Ocupados',r.ocupados],
+            ['Disponíveis',r.disponiveis],
+            ['Bloqueados',r.bloqueados],
+            ['Reservados',r.reservados],
+            ['Higienização',r.higienizacao],
+            ['UTI — pacientes',r.utiOcupados],
+            ['UTI — leitos totais',r.utiTotal],
+            ['UTI — disponíveis',r.utiDisponiveis],
+            ['UTI — ocupação',utiPct+'%']
+          ];
+
+          box.innerHTML=
+            '<h3 style="margin:0 0 12px;color:#0f172a">Resumo Geral da Ocupação</h3>'+
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'+
+              cards.map(([t,v])=>'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:#f8fafc"><div style="font-size:.76rem;color:#64748b;font-weight:700">'+esc(t)+'</div><div style="font-size:1.35rem;font-weight:800;color:#0f172a;margin-top:3px">'+esc(v)+'</div></div>').join('')+
+            '</div>'+
+            '<div style="display:grid;grid-template-columns:1fr 2fr;gap:14px;margin-top:16px">'+
+              '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px">'+
+                '<h4 style="margin:0 0 8px">Pacientes ocupando leito por sexo</h4>'+
+                '<div>♀ Feminino: <strong>'+r.sexo.Feminino+'</strong></div>'+
+                '<div>♂ Masculino: <strong>'+r.sexo.Masculino+'</strong></div>'+
+                '<div>Não informado: <strong>'+r.sexo['Não informado']+'</strong></div>'+
+              '</div>'+
+              '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px">'+
+                '<h4 style="margin:0 0 8px">Pacientes ocupando leito por especialidade / perfil</h4>'+
+                (espEntries.length
+                  ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px">'+espEntries.map(([k,v])=>'<div style="background:#f8fafc;border-radius:6px;padding:7px 9px"><span>'+esc(k)+'</span>: <strong>'+v+'</strong></div>').join('')+'</div>'
+                  : '<span style="color:#64748b">Nenhum paciente ocupado no momento.</span>')+
+              '</div>'+
+            '</div>';
+        }
+
+        const renderComResumoV12=w.renderizarPainelLeitos;
+        w.renderizarPainelLeitos=function(){
+          const r=renderComResumoV12.apply(w,arguments);
+          setTimeout(renderResumoOcupacaoV12,50);
+          return r;
+        };
+        setTimeout(renderResumoOcupacaoV12,1200);
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
