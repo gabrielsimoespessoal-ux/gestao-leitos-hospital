@@ -1075,7 +1075,19 @@
             especialidades:{}
           };
           (w.setoresData||[]).forEach(s=>{
-            const ehUti=String(s.tipo||'').toUpperCase()==='UTI'||String(s.nome||'').toUpperCase().includes('UTI');
+            const nomeSetor=String(s.nome||'').toUpperCase();
+            const tipoSetor=String(s.tipo||'').toUpperCase();
+            const ehCirurgicoNaoCensitario =
+              nomeSetor==='SALAS OPERATÓRIAS' ||
+              nomeSetor==='SALAS OPERATORIAS' ||
+              nomeSetor==='SRPA' ||
+              tipoSetor==='CENTRO CIRÚRGICO' ||
+              tipoSetor==='CENTRO CIRURGICO' ||
+              tipoSetor==='RECUPERAÇÃO PÓS-ANESTÉSICA' ||
+              tipoSetor==='RECUPERACAO POS-ANESTESICA';
+            if(ehCirurgicoNaoCensitario)return;
+
+            const ehUti=tipoSetor==='UTI'||nomeSetor.includes('UTI');
             s.leitos.forEach(l=>{
               resumo.total++;
               if(ehUti)resumo.utiTotal++;
@@ -1132,7 +1144,8 @@
           ];
 
           box.innerHTML=
-            '<h3 style="margin:0 0 12px;color:#0f172a">Resumo Geral da Ocupação</h3>'+
+            '<h3 style="margin:0 0 6px;color:#0f172a">Resumo Geral da Ocupação</h3>'+
+            '<div style="margin:0 0 12px;color:#64748b;font-size:.78rem">Não inclui Salas Operatórias nem leitos de SRPA.</div>'+
             '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'+
               cards.map(([t,v])=>'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:#f8fafc"><div style="font-size:.76rem;color:#64748b;font-weight:700">'+esc(t)+'</div><div style="font-size:1.35rem;font-weight:800;color:#0f172a;margin-top:3px">'+esc(v)+'</div></div>').join('')+
             '</div>'+
