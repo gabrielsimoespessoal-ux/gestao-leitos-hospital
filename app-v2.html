@@ -973,16 +973,21 @@
             if (typeof valor === 'object' && typeof valor.toDate === 'function') {
                 try { return valor.toDate().toISOString(); } catch (e) { return null; }
             }
-            if (Array.isArray(valor)) {
-                return valor.map(limparParaFirebase).filter(function(v) { return v !== undefined; });
+            if (Array.isArray(valor) || Object.prototype.toString.call(valor) === '[object Array]') {
+                var arr = [];
+                for (var i = 0; i < valor.length; i++) {
+                    var item = limparParaFirebase(valor[i]);
+                    if (item !== undefined) arr.push(item);
+                }
+                return arr;
             }
             if (typeof valor === 'object') {
-                var out = {};
+                var out = Object.create(null);
                 Object.keys(valor).forEach(function(k) {
                     var v = limparParaFirebase(valor[k]);
                     if (v !== undefined) out[k] = v;
                 });
-                return out;
+                return Object.assign({}, out);
             }
             if (typeof valor === 'number' && !isFinite(valor)) return null;
             return valor;
