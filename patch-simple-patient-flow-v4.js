@@ -361,28 +361,6 @@
         setTimeout(repararOliviaOrfa,1200);
         setTimeout(repararOliviaOrfa,3000);
 
-        // atalho administrativo para liberação explícita de leitos selecionados
-        const painelAdmin=d.getElementById('painel');
-        if(painelAdmin&&!d.getElementById('liberar-leitos-102-v5')){
-          const b=d.createElement('button');
-          b.id='liberar-leitos-102-v5';
-          b.className='btn';
-          b.style.cssText='background:#10b981;margin-left:8px';
-          b.textContent='Liberar 102A, 102B e 104A';
-          b.onclick=async()=>{
-            if(!w.confirm('Confirmar a liberação dos leitos 102A, 102B e 104A?'))return;
-            const setor=(w.setoresData||[]).find(s=>String(s.nome||'').toUpperCase().includes('LIBÂNIA')||String(s.nome||'').toUpperCase().includes('LIBANIA'));
-            if(!setor){w.alert('Setor Irmã Libânia não encontrado.');return;}
-            const alvos=new Set(['102A','102B','104A']);
-            setor.leitos.forEach(l=>{if(alvos.has(String(l.n).toUpperCase())){l.status='disponivel';l.paciente='';l.prontuario='';}});
-            if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
-            if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
-            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
-            w.alert('Leitos 102A, 102B e 104A liberados.');
-          };
-          painelAdmin.querySelector('.page-header')?.appendChild(b);
-        }
-
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
