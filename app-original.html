@@ -966,30 +966,50 @@
             }
         }
 
+        function limparParaFirebase(valor) {
+            if (valor === undefined || typeof valor === 'function') return undefined;
+            if (valor === null) return null;
+            if (valor instanceof Date) return isNaN(valor.getTime()) ? null : valor.toISOString();
+            if (typeof valor === 'object' && typeof valor.toDate === 'function') {
+                try { return valor.toDate().toISOString(); } catch (e) { return null; }
+            }
+            if (Array.isArray(valor)) {
+                return valor.map(limparParaFirebase).filter(function(v) { return v !== undefined; });
+            }
+            if (typeof valor === 'object') {
+                var out = {};
+                Object.keys(valor).forEach(function(k) {
+                    var v = limparParaFirebase(valor[k]);
+                    if (v !== undefined) out[k] = v;
+                });
+                return out;
+            }
+            if (typeof valor === 'number' && !isFinite(valor)) return null;
+            return valor;
+        }
+
         async function salvarDadosNoFirebase() {
             if (!window.db) return false;
             try {
                 const { doc, setDoc } = window.firebaseModules;
-                await setDoc(doc(window.db, "hospital", "dados"), {
+                var payload = limparParaFirebase({
                     setoresData: setoresData,
-                    movimentacoesHistorico: movimentacoesHistorico.map(m => ({
-                        ...m,
-                        dataDesfechoObj: serializarDataSegura(m.dataDesfechoObj),
-                        dataAdmissaoObj: serializarDataSegura(m.dataAdmissaoObj)
-                    })),
+                    movimentacoesHistorico: movimentacoesHistorico,
                     transferenciasAtivas: transferenciasAtivas,
                     transferenciasFinalizadas: transferenciasFinalizadas,
                     basePacientesCadastrados: basePacientesCadastrados
                 });
+                await setDoc(doc(window.db, "hospital", "dados"), payload);
                 return true;
             } catch (e) {
                 console.error("Erro ao salvar no Firebase: ", e);
-                alert("Não foi possível salvar a alteração no banco de dados. A ação não será considerada concluída.");
+                alert("Não foi possível salvar a alteração no banco de dados. Detalhe: " + (e && e.message ? e.message : e));
                 return false;
             }
         }
 
         function reconciliarSaidasPersistidas() {
+            var alterou = false;
             try {
                 var saidas = ['Alta Hospitalar','Alta a Pedido','Evasão','Óbito','Transferência Externa','Liberação de Leito','Disponível'];
                 var ultimoPorProntuario = {};
@@ -1012,11 +1032,13 @@
 
                             if(leito.reservaPrevAlta && leito.reservaPrevAlta.prontuario !== pr) {
                                 leito.status = 'reservado';
+                                alterou = true;
                                 leito.paciente = leito.reservaPrevAlta.paciente || '';
                                 leito.prontuario = leito.reservaPrevAlta.prontuario || '';
                                 delete leito.reservaPrevAlta;
                             } else {
                                 leito.status = 'disponivel';
+                                alterou = true;
                                 leito.paciente = '';
                                 leito.prontuario = '';
                                 if(leito.reservaPrevAlta && leito.reservaPrevAlta.prontuario === pr) delete leito.reservaPrevAlta;
@@ -1025,6 +1047,7 @@
                     });
 
                     if(basePacientesCadastrados[pr]) {
+                        if (basePacientesCadastrados[pr].statusInternacao !== 'encerrado') alterou = true;
                         basePacientesCadastrados[pr].statusInternacao = 'encerrado';
                         basePacientesCadastrados[pr].motivoSaida = acaoTxt;
                         basePacientesCadastrados[pr].previsaoAlta = '';
@@ -1033,6 +1056,7 @@
             } catch (e) {
                 console.error('Erro ao reconciliar saídas persistidas:', e);
             }
+            return alterou;
         }
 
         function carregarDadosDoFirebase() {
