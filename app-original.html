@@ -988,7 +988,7 @@
             return valor;
         }
 
-        async function salvarDadosNoFirebase() {
+        async function salvarDadosNoFirebase(silencioso) {
             if (!window.db) return false;
             try {
                 const { doc, setDoc } = window.firebaseModules;
@@ -1003,7 +1003,9 @@
                 return true;
             } catch (e) {
                 console.error("Erro ao salvar no Firebase: ", e);
-                alert("Não foi possível salvar a alteração no banco de dados. Detalhe: " + (e && e.message ? e.message : e));
+                if (!silencioso) {
+                    alert("Não foi possível salvar a alteração no banco de dados. Detalhe: " + (e && e.message ? e.message : e));
+                }
                 return false;
             }
         }
