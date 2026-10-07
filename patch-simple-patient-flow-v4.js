@@ -1296,23 +1296,71 @@
           const saidas=['Alta Hospitalar','Alta a Pedido','Evasão','Óbito','Transferência Externa','Disponível'];
           if(saidas.includes(acao)){
             if(!w.confirm('Confirmar '+acao.toUpperCase()+' de '+nome+' no leito '+l.n+' de '+s.nome+'?'))return;
-            const reservaEspecial=l.reservaPrevAlta?{...l.reservaPrevAlta}:null;
-            const acaoHistorico=acao==='Disponível'?'Liberação de Leito':acao;
-            await registrarEventoAtalhoV13({acao:acaoHistorico,pr,nome,nasc,perfil,sexo,convenio,origem,setor:s.nome,leito:l.n,
-              detalhe:reservaEspecial?'Após a saída, a reserva cirúrgica existente foi mantida para este leito.':''});
 
-            if(reservaEspecial){
-              l.status='reservado';
-              l.paciente=reservaEspecial.paciente;
-              l.prontuario=reservaEspecial.prontuario;
-              delete l.reservaPrevAlta;
-            }else{
-              l.status='disponivel';
-              l.paciente='';
-              l.prontuario='';
+            const norm=x=>String(x||'').trim().toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+            const nomeNorm=norm(nome);
+            const acaoHistorico=acao==='Disponível'?'Liberação de Leito':acao;
+            let reservasPromovidas=0;
+            let vinculosRemovidos=0;
+
+            await registrarEventoAtalhoV13({
+              acao:acaoHistorico,pr,nome,nasc,perfil,sexo,convenio,origem,setor:s.nome,leito:l.n
+            });
+
+            // Limpa TODOS os vínculos ativos do paciente, não apenas o primeiro leito encontrado.
+            (w.setoresData||[]).forEach(setorAtual=>{
+              (setorAtual.leitos||[]).forEach(leitoAtual=>{
+                const mesmoPacientePrincipal =
+                  (pr && leitoAtual.prontuario===pr) ||
+                  (nomeNorm && norm(leitoAtual.paciente)===nomeNorm);
+
+                if(mesmoPacientePrincipal && ['ocupado','reservado'].includes(leitoAtual.status)){
+                  const reservaEspecial=leitoAtual.reservaPrevAlta?{...leitoAtual.reservaPrevAlta}:null;
+                  if(reservaEspecial){
+                    leitoAtual.status='reservado';
+                    leitoAtual.paciente=reservaEspecial.paciente;
+                    leitoAtual.prontuario=reservaEspecial.prontuario;
+                    delete leitoAtual.reservaPrevAlta;
+                    reservasPromovidas++;
+                  }else{
+                    leitoAtual.status='disponivel';
+                    leitoAtual.paciente='';
+                    leitoAtual.prontuario='';
+                  }
+                  vinculosRemovidos++;
+                }
+
+                // Se o paciente que saiu também estava como RESERVA futura em outro leito,
+                // remove essa reserva para impedir que ele reapareça após F5/sincronização.
+                if(leitoAtual.reservaPrevAlta){
+                  const r=leitoAtual.reservaPrevAlta;
+                  const mesmaReserva =
+                    (pr && r.prontuario===pr) ||
+                    (nomeNorm && norm(r.paciente)===nomeNorm);
+                  if(mesmaReserva){
+                    delete leitoAtual.reservaPrevAlta;
+                  }
+                }
+              });
+            });
+
+            // Marca o cadastro como inativo, preservando dados para histórico.
+            if(pr&&w.basePacientesCadastrados?.[pr]){
+              w.basePacientesCadastrados[pr].statusInternacao='encerrado';
+              w.basePacientesCadastrados[pr].motivoSaida=acaoHistorico;
+              w.basePacientesCadastrados[pr].dataSaida=new Date().toISOString();
+              w.basePacientesCadastrados[pr].previsaoAlta='';
             }
+
             await finalizarAtualizacaoAtalhoV13();
-            w.alert(acaoHistorico+' registrada com sucesso. '+(reservaEspecial?'O leito ficou reservado para o próximo paciente.':'O leito foi liberado.'));
+
+            // Força também o espelho específico das reservas a refletir as remoções.
+            if(typeof persistirReservasPrevAltaV11==='function')await persistirReservasPrevAltaV11();
+
+            const detalheReservas=reservasPromovidas
+              ? ' '+reservasPromovidas+' reserva(s) futura(s) foi(ram) mantida(s) como reserva principal.'
+              : '';
+            w.alert(acaoHistorico+' registrada com sucesso. '+vinculosRemovidos+' vínculo(s) ativo(s) removido(s).'+detalheReservas);
             return;
           }
 
