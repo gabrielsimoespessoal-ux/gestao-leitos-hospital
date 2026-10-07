@@ -997,13 +997,25 @@
             if (!window.db) return false;
             try {
                 const { doc, setDoc } = window.firebaseModules;
-                var payload = limparParaFirebase({
+                var payloadBruto = {
                     setoresData: setoresData,
                     movimentacoesHistorico: movimentacoesHistorico,
                     transferenciasAtivas: transferenciasAtivas,
                     transferenciasFinalizadas: transferenciasFinalizadas,
                     basePacientesCadastrados: basePacientesCadastrados
-                });
+                };
+
+                // Round-trip JSON força Arrays/Objetos simples do mesmo realm e elimina protótipos customizados.
+                var payload = JSON.parse(JSON.stringify(payloadBruto, function(chave, valor) {
+                    if (valor === undefined || typeof valor === 'function') return undefined;
+                    if (valor instanceof Date) return isNaN(valor.getTime()) ? null : valor.toISOString();
+                    if (valor && typeof valor === 'object' && typeof valor.toDate === 'function') {
+                        try { return valor.toDate().toISOString(); } catch (e) { return null; }
+                    }
+                    if (typeof valor === 'number' && !isFinite(valor)) return null;
+                    return valor;
+                }));
+
                 await setDoc(doc(window.db, "hospital", "dados"), payload);
                 return true;
             } catch (e) {
