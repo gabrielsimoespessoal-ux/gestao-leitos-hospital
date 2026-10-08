@@ -233,33 +233,10 @@
         function abrirAtalhoAcaoOperacional(){prepararAcaoOperacionalPainel(true);}
 
         async function confirmarAcaoOperacionalPainel(){
-          const info=prepararAcaoOperacionalPainel(false); if(!info)return;
-          if(!w.confirm('Confirmar '+info.acao+' para este paciente no leito '+info.leito+' de '+info.setor+'?'))return;
-          const histAntes=(w.movimentacoesHistorico||[]).length;
-          const statusAntes=setorAtualPorPr(info.pr)?.l?.status||'';
-          try{
-            const ret=w.executarMovimentacaoLeito();
-            if(ret&&typeof ret.then==='function')await ret;
-            await new Promise(r=>setTimeout(r,250));
-          }catch(e){console.error(e);w.alert('Não foi possível executar a ação: '+(e.message||e));return;}
-
-          const histDepois=(w.movimentacoesHistorico||[]).length;
-          let encontrou=false,novoStatus='';
-          for(const s of w.setoresData){for(const l of s.leitos){if(l.prontuario===info.pr){encontrou=true;novoStatus=l.status;}}}
-          const acaoSaida=['Alta Hospitalar','Alta a Pedido','Evasão','Óbito','Transferência Externa','Disponível'].includes(info.acao);
-          const statusOk=acaoSaida ? !encontrou : (info.acao==='Admissão'||info.acao==='Transferência Interna' ? novoStatus==='ocupado' : info.acao==='Reservado'||info.acao==='Reserva Cirúrgica Eletiva' ? novoStatus==='reservado' : info.acao==='Bloqueio' ? novoStatus==='bloqueado' : true);
-          if(histDepois<=histAntes||!statusOk){
-            w.alert('A ação não foi concluída corretamente. Nenhuma alteração foi considerada confirmada. Revise os campos obrigatórios e tente novamente.');
-            return;
-          }
-          if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
-          if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
-          if(typeof w.atualizarTabelaMovimentacoes==='function')w.atualizarTabelaMovimentacoes();
-          if(typeof w.atualizarTabelaHistoricoGeral==='function')w.atualizarTabelaHistoricoGeral();
-          if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
-          d.getElementById('modal-editar-paciente').style.display='none';
-          w.alert('Ação confirmada. O leito e os históricos foram atualizados com sucesso.');
+          // Compatibilidade: qualquer handler antigo delega obrigatoriamente ao fluxo atômico atual.
+          return confirmarAcaoPainelV13();
         }
+
         const botaoAtalho=d.getElementById('btn-acao-operacional-v4');
         if(botaoAtalho)botaoAtalho.onclick=abrirAtalhoAcaoOperacional;
         const botaoConfirmar=d.getElementById('btn-confirmar-acao-v5');
