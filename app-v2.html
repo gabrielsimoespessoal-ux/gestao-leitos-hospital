@@ -197,7 +197,7 @@
                 <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
                     <button class="btn" onclick="window.print()">Imprimir Lista de Internos</button>
                     <button class="btn btn-success" onclick="exportarExcelMovimentacoes()">Exportar Excel</button>
-                    <button class="btn btn-danger" id="btn-limpar-hist" onclick="limparTodoHistoricoMov()">Limpar Histórico</button>
+                    <button class="btn btn-danger" id="btn-limpar-hist" onclick="limparTodoHistoricoMov()" style="background:#64748b">Limpeza em massa bloqueada</button>
                 </div>
             </div>
 
@@ -993,10 +993,78 @@
             return valor;
         }
 
+        var firebaseRevisionLocal = 0;
+        var ultimaGravacaoSeguraEm = null;
+
+        function contarEstadoProtegido(payload) {
+            var setores = Array.isArray(payload && payload.setoresData) ? payload.setoresData : [];
+            var ocupados = 0, reservados = 0, bloqueados = 0;
+            setores.forEach(function(s) {
+                (s.leitos || []).forEach(function(l) {
+                    if(l.status === 'ocupado') ocupados++;
+                    else if(l.status === 'reservado') reservados++;
+                    else if(l.status === 'bloqueado') bloqueados++;
+                });
+            });
+            return {
+                ocupados: ocupados,
+                reservados: reservados,
+                bloqueados: bloqueados,
+                historico: Array.isArray(payload && payload.movimentacoesHistorico) ? payload.movimentacoesHistorico.length : 0,
+                pacientes: payload && payload.basePacientesCadastrados ? Object.keys(payload.basePacientesCadastrados).length : 0
+            };
+        }
+
+        function perdaSuspeitaProtegida(atual, proximo) {
+            if(!atual || !proximo) return null;
+            var regras = [
+                ['ocupados', 3, 0.25, 'leitos ocupados'],
+                ['historico', 5, 0.20, 'registros do histórico'],
+                ['pacientes', 5, 0.20, 'cadastros de pacientes']
+            ];
+            for(var i=0;i<regras.length;i++) {
+                var k=regras[i][0], minimo=regras[i][1], proporcao=regras[i][2], nome=regras[i][3];
+                var antes = Number(atual[k] || 0), depois = Number(proximo[k] || 0);
+                var perda = antes - depois;
+                if(antes >= minimo && perda >= minimo && perda / Math.max(antes,1) >= proporcao) {
+                    return 'A gravação tentaria remover de uma vez ' + perda + ' ' + nome + ' (' + antes + ' → ' + depois + ').';
+                }
+            }
+            return null;
+        }
+
+        async function criarBackupSegurancaFirebase(dadosAtuais, motivo) {
+            const { doc, setDoc } = window.firebaseModules;
+            var stamp = new Date().toISOString().replace(/[:.]/g,'-');
+            var backup = JSON.parse(JSON.stringify({
+                ...dadosAtuais,
+                _backup_meta: {
+                    criadoEm: new Date().toISOString(),
+                    motivo: motivo || 'antes_de_gravacao',
+                    revisao: Number(dadosAtuais && dadosAtuais._meta && dadosAtuais._meta.revision || 0)
+                }
+            }));
+            await setDoc(doc(window.db, 'hospital', 'backup_' + stamp), backup);
+            await setDoc(doc(window.db, 'hospital', 'ultimo_backup_seguro'), backup);
+            return true;
+        }
+
         async function salvarDadosNoFirebase(silencioso) {
             if (!window.db) return false;
             try {
-                const { doc, setDoc } = window.firebaseModules;
+                const { doc, getDoc, setDoc } = window.firebaseModules;
+                var ref = doc(window.db, "hospital", "dados");
+                var snapAtual = await getDoc(ref);
+                var remoto = snapAtual.exists() ? snapAtual.data() : {};
+
+                var revisaoRemota = Number(remoto && remoto._meta && remoto._meta.revision || 0);
+                if(firebaseRevisionLocal && revisaoRemota && revisaoRemota !== firebaseRevisionLocal) {
+                    if(!silencioso) {
+                        alert('PROTEÇÃO DE CONCORRÊNCIA: os dados foram alterados em outro computador desde que esta tela foi carregada. Atualize a página antes de tentar novamente para evitar sobrescrever trabalho da equipe.');
+                    }
+                    return false;
+                }
+
                 var payloadBruto = {
                     setoresData: setoresData,
                     movimentacoesHistorico: movimentacoesHistorico,
@@ -1005,7 +1073,6 @@
                     basePacientesCadastrados: basePacientesCadastrados
                 };
 
-                // Round-trip JSON força Arrays/Objetos simples do mesmo realm e elimina protótipos customizados.
                 var payload = JSON.parse(JSON.stringify(payloadBruto, function(chave, valor) {
                     if (valor === undefined || typeof valor === 'function') return undefined;
                     if (valor instanceof Date) return isNaN(valor.getTime()) ? null : valor.toISOString();
@@ -1016,12 +1083,37 @@
                     return valor;
                 }));
 
-                await setDoc(doc(window.db, "hospital", "dados"), payload);
+                var atualResumo = contarEstadoProtegido(remoto);
+                var novoResumo = contarEstadoProtegido(payload);
+                var suspeita = perdaSuspeitaProtegida(atualResumo, novoResumo);
+
+                if(suspeita && window.__permitirGravacaoEmMassaUmaVez !== true) {
+                    console.error('Gravação bloqueada pela proteção anti-perda:', suspeita, atualResumo, novoResumo);
+                    if(!silencioso) {
+                        alert('GRAVAÇÃO BLOQUEADA POR SEGURANÇA.\n\n' + suspeita + '\n\nNenhum dado foi sobrescrito. Para alterações em massa, use o fluxo administrativo com backup explícito.');
+                    }
+                    return false;
+                }
+                window.__permitirGravacaoEmMassaUmaVez = false;
+
+                await criarBackupSegurancaFirebase(remoto, 'antes_de_gravacao');
+
+                var novaRevisao = revisaoRemota + 1;
+                payload._meta = {
+                    revision: novaRevisao,
+                    updatedAt: new Date().toISOString(),
+                    previousRevision: revisaoRemota,
+                    safeguards: 'v1'
+                };
+
+                await setDoc(ref, payload);
+                firebaseRevisionLocal = novaRevisao;
+                ultimaGravacaoSeguraEm = payload._meta.updatedAt;
                 return true;
             } catch (e) {
                 console.error("Erro ao salvar no Firebase: ", e);
                 if (!silencioso) {
-                    alert("Não foi possível salvar a alteração no banco de dados. Detalhe: " + (e && e.message ? e.message : e));
+                    alert("Não foi possível salvar a alteração com segurança. Nenhuma gravação deve ser considerada concluída. Detalhe: " + (e && e.message ? e.message : e));
                 }
                 return false;
             }
@@ -1084,6 +1176,7 @@
             onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
+                    firebaseRevisionLocal = Number(data && data._meta && data._meta.revision || 0);
                     if (data.setoresData) setoresData = data.setoresData;
                     if (data.movimentacoesHistorico) {
                         movimentacoesHistorico = data.movimentacoesHistorico.map(m => ({
@@ -1854,19 +1947,7 @@
         }
 
         function limparTodoHistoricoMov() {
-            if(usuarioAtual.perfil !== 'Administrador') { alert('Acesso restrito.'); return; }
-            if(confirm("Limpar todo o histórico e leitos?")) {
-                movimentacoesHistorico = [];
-                setoresData.forEach(function(s) {
-                    s.leitos.forEach(function(l) { l.status = 'disponivel'; l.paciente = ''; l.prontuario = ''; });
-                });
-                renderizarPainelLeitos();
-                atualizarTabelaMovimentacoes();
-                atualizarTabelaHistoricoGeral();
-                atualizarTabelaPacientesInternos();
-                salvarDadosNoFirebase();
-                alert('Histórico limpo.');
-            }
+            alert('FUNÇÃO DESATIVADA POR SEGURANÇA. O histórico e os leitos não podem mais ser apagados em massa pela interface. Se for necessário fazer uma limpeza administrativa, primeiro deve ser criado e validado um backup externo.');
         }
 
         function salvarNovaTransferencia() {
