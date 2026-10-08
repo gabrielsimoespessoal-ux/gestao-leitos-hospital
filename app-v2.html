@@ -143,7 +143,125 @@
         };
 
 
-        // Sincronização em tempo real ao carregar a página
+                // Saída hospitalar atômica e restrita ao leito selecionado.
+        window.executarSaidaLeitoAtomica = async function(argsBrutos) {
+            const args = JSON.parse(JSON.stringify(argsBrutos || {}));
+            const agora = new Date();
+            const ref = doc(db, 'hospital', 'dados');
+            const stamp = agora.toISOString().replace(/[:.]/g,'-');
+            const backupRef = doc(db, 'hospital', 'backup_saida_' + stamp);
+            const auditRef = doc(db, 'hospital', 'auditoria_saida_' + stamp);
+
+            const snapAntes = await getDoc(ref);
+            if (!snapAntes.exists()) throw new Error('Banco principal não encontrado.');
+            const remotoAntes = JSON.parse(JSON.stringify(snapAntes.data()));
+            await setDoc(backupRef, JSON.parse(JSON.stringify({
+                ...remotoAntes,
+                _backup_meta: {
+                    tipo:'antes_saida_leito',
+                    criadoEm:agora.toISOString(),
+                    setor:args.setor, leito:args.leito, prontuario:args.pr, acao:args.acao
+                }
+            })));
+
+            const resultado = await runTransaction(db, async function(tx){
+                const snap = await tx.get(ref);
+                if(!snap.exists()) throw new Error('Banco principal não encontrado.');
+                const dados = JSON.parse(JSON.stringify(snap.data()));
+                const setor = (dados.setoresData||[]).find(function(x){return x.nome===args.setor;});
+                const leito = setor && (setor.leitos||[]).find(function(x){return String(x.n)===String(args.leito);});
+                if(!leito) throw new Error('Leito não encontrado.');
+
+                if(String(leito.prontuario||'')!==String(args.pr||'')){
+                    const e=new Error('O paciente deste leito foi alterado em outro computador.');
+                    e.code='CONFLITO_REAL'; throw e;
+                }
+
+                let reservaPromovida=false;
+                if(leito.reservaPrevAlta){
+                    const r=JSON.parse(JSON.stringify(leito.reservaPrevAlta));
+                    leito.status='reservado';
+                    leito.paciente=r.paciente||'';
+                    leito.prontuario=r.prontuario||'';
+                    delete leito.reservaPrevAlta;
+                    reservaPromovida=true;
+                }else{
+                    leito.status='disponivel';
+                    leito.paciente='';
+                    leito.prontuario='';
+                }
+
+                dados.basePacientesCadastrados=dados.basePacientesCadastrados||{};
+                if(args.pr && dados.basePacientesCadastrados[args.pr]){
+                    dados.basePacientesCadastrados[args.pr].statusInternacao='encerrado';
+                    dados.basePacientesCadastrados[args.pr].motivoSaida=args.acao;
+                    dados.basePacientesCadastrados[args.pr].dataSaida=agora.toISOString();
+                    dados.basePacientesCadastrados[args.pr].previsaoAlta='';
+                }
+
+                dados.movimentacoesHistorico=Array.isArray(dados.movimentacoesHistorico)?dados.movimentacoesHistorico:[];
+                const hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+                const dataTxt=agora.toLocaleDateString('pt-BR')+' '+hora;
+                dados.movimentacoesHistorico.unshift({
+                    data:dataTxt,dataIso:agora.toISOString(),hora:hora,
+                    atendimentoNasc:'Pront: '+(args.pr||'-')+'<br><small>Nasc: '+(args.nasc||'-')+'</small>',
+                    atendimento:args.pr||'-',nascimento:args.nasc||'',paciente:args.nome||'-',
+                    setor:args.setor+' (Leito '+args.leito+')',
+                    origem:args.origem||args.setor,destino:args.setor,
+                    perfil:(args.perfil||'-')+(args.sexo?' ('+args.sexo+')':''),
+                    convenio:args.convenio||'-',acao:args.acao,
+                    dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString()
+                });
+
+                const rev=Number(dados&&dados._meta&&dados._meta.revision||0)+1;
+                dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),safeguards:'multiuser-v4',editor:args.usuario||'usuario'};
+                tx.set(ref,JSON.parse(JSON.stringify(dados)));
+                tx.set(auditRef,JSON.parse(JSON.stringify({
+                    tipo:'saida_leito_atomica',criadoEm:agora.toISOString(),setor:args.setor,leito:args.leito,
+                    prontuario:args.pr,paciente:args.nome,acao:args.acao,reservaPromovida:reservaPromovida,
+                    usuario:args.usuario||'usuario',revisao:rev
+                })));
+                return {ok:true,reservaPromovida:reservaPromovida,revisao:rev};
+            });
+            return JSON.parse(JSON.stringify(resultado));
+        };
+
+        // Recuperação única do estado imediatamente anterior ao bug de alta em massa.
+        window.tentarRecuperarUltimoBackupSeguro = async function() {
+            try{
+                const marcadorRef=doc(db,'hospital','recovery_alta_massa_20261008');
+                const marcador=await getDoc(marcadorRef);
+                if(marcador.exists() && marcador.data() && marcador.data().done) return false;
+
+                const atualRef=doc(db,'hospital','dados');
+                const backupRef=doc(db,'hospital','ultimo_backup_seguro');
+                const [atualSnap,backupSnap]=await Promise.all([getDoc(atualRef),getDoc(backupRef)]);
+                if(!atualSnap.exists()||!backupSnap.exists()) return false;
+
+                const atual=JSON.parse(JSON.stringify(atualSnap.data()));
+                const backup=JSON.parse(JSON.stringify(backupSnap.data()));
+                const contar=function(d){
+                    let n=0;(d.setoresData||[]).forEach(function(s){(s.leitos||[]).forEach(function(l){if(l.status==='ocupado'||l.status==='reservado')n++;});});return n;
+                };
+                const na=contar(atual), nb=contar(backup);
+                const criado=Date.parse(backup._backup_meta&&backup._backup_meta.criadoEm||'');
+                const recente=Number.isFinite(criado) && (Date.now()-criado)<2*60*60*1000;
+                if(recente && nb>=na+3){
+                    const recuperado=JSON.parse(JSON.stringify(backup));
+                    delete recuperado._backup_meta;
+                    recuperado._meta={...(recuperado._meta||{}),updatedAt:new Date().toISOString(),recovery:'alta_massa_20261008'};
+                    await setDoc(atualRef,recuperado);
+                    await setDoc(marcadorRef,{done:true,at:new Date().toISOString(),antes:na,depois:nb});
+                    alert('RECUPERAÇÃO DE SEGURANÇA CONCLUÍDA: o estado anterior à alta em massa foi restaurado ('+na+' → '+nb+' vínculos ativos).');
+                    return true;
+                }
+                await setDoc(marcadorRef,{done:false,checkedAt:new Date().toISOString(),atual:na,backup:nb,recente:recente});
+                return false;
+            }catch(e){console.error('Falha na recuperação segura pós-alta:',e);return false;}
+        };
+        setTimeout(function(){ window.tentarRecuperarUltimoBackupSeguro(); },2500);
+
+// Sincronização em tempo real ao carregar a página
         window.addEventListener('DOMContentLoaded', () => {
             carregarDadosDoFirebase();
         });
