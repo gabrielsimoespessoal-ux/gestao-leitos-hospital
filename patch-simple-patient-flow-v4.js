@@ -383,35 +383,65 @@
         };
 
         w.abrirHistoricoPacienteLeito=function(setor,leito){
-          oldBedOpen.call(w,setor,leito);
           const s=w.setoresData.find(x=>x.nome===setor),l=s?.leitos.find(x=>x.n===leito);
-          if(!l||!(l.status==='ocupado'||l.status==='reservado'))return;
-          const cont=d.getElementById('paciente-modal-conteudo'); if(!cont)return;
+          if(!l)return;
 
-          if(l.prontuario&&!cont.querySelector('#editar-paciente-leito-v3')){
-            const b=getBase(l.prontuario);
-            const btn=d.createElement('button');btn.id='editar-paciente-leito-v3';btn.className='btn';btn.style.margin='12px 8px 0 0';btn.textContent='✏️ Editar cadastro do paciente';
-            btn.onclick=()=>{d.getElementById('modal-historico-paciente').style.display='none';w.abrirEdicaoPaciente(l.prontuario,l.paciente,b.nascimento||'',b.perfil||'Enfermaria Clínica');};
-            cont.appendChild(btn);
+          // Leito sem paciente: mantém a tela de histórico/gestão do leito.
+          if(!(l.status==='ocupado'||l.status==='reservado') || !l.prontuario){
+            oldBedOpen.call(w,setor,leito);
+            return;
           }
 
-          if(l.reservaPrevAlta&&!cont.querySelector('#reserva-prev-alta-card-v9')){
+          // Leito ocupado/reservado: abre diretamente o cadastro do paciente.
+          const b=getBase(l.prontuario);
+          w.abrirEdicaoPaciente(l.prontuario,l.paciente,b.nascimento||'',b.perfil||'Enfermaria Clínica');
+
+          const modal=d.getElementById('modal-editar-paciente');
+          if(!modal)return;
+          const body=modal.querySelector('.modal-content')||modal.querySelector('[style*="background:white"]')||modal.firstElementChild;
+          if(!body)return;
+
+          const antigo=d.getElementById('resumo-acoes-leito-v15');
+          if(antigo)antigo.remove();
+
+          const hist=(w.movimentacoesHistorico||[])
+            .filter(m=>String(m.atendimento||'')===String(l.prontuario||'') || (m.paciente&&String(m.paciente).trim().toUpperCase()===String(l.paciente||'').trim().toUpperCase()))
+            .slice(0,6);
+
+          const resumo=d.createElement('div');
+          resumo.id='resumo-acoes-leito-v15';
+          resumo.style.cssText='margin:0 0 1rem;padding:12px;background:#f8fafc;border:1px solid #cbd5e1;border-left:4px solid #0ea5e9;border-radius:8px';
+          resumo.innerHTML=
+            '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px">'+
+              '<strong style="color:#0f172a">Resumo do Leito / Ações Recentes</strong>'+
+              '<span style="font-size:.8rem;color:#475569">'+esc(setor)+' · Leito '+esc(leito)+' · '+esc(l.status)+'</span>'+
+            '</div>'+
+            '<div style="font-size:.85rem;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 12px">'+
+              '<div><b>Paciente:</b> '+esc(l.paciente||'-')+'</div>'+
+              '<div><b>Prontuário:</b> '+esc(l.prontuario||'-')+'</div>'+
+              '<div><b>Sexo:</b> '+esc(b.sexo||'-')+'</div>'+
+              '<div><b>Perfil:</b> '+esc(b.perfil||'-')+'</div>'+
+              '<div><b>Convênio:</b> '+esc(b.convenio||'-')+'</div>'+
+              '<div><b>Previsão de alta:</b> '+esc(b.previsaoAlta ? new Date(b.previsaoAlta).toLocaleString('pt-BR') : 'Não informada')+'</div>'+
+            '</div>'+
+            '<div style="margin-top:10px;font-size:.82rem"><b>Últimas ações:</b>'+
+              (hist.length
+                ? '<ul style="margin:6px 0 0 18px">'+hist.map(h=>'<li><b>'+esc(h.data||h.dataDesfecho||'-')+'</b> — '+esc(String(h.acao||'').replace(/<[^>]*>/g,' '))+'</li>').join('')+'</ul>'
+                : '<div style="margin-top:5px;color:#64748b">Nenhuma movimentação recente localizada para este prontuário.</div>')+
+            '</div>';
+
+          const acaoBox=d.getElementById('atalho-acao-operacional-v4');
+          if(acaoBox)acaoBox.before(resumo);
+          else body.appendChild(resumo);
+
+          if(l.reservaPrevAlta){
             const r=l.reservaPrevAlta;
-            const card=d.createElement('div');
-            card.id='reserva-prev-alta-card-v9';
-            card.style.cssText='margin-top:14px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-left:5px solid #2563eb;border-radius:8px';
-            const prev=r.previsaoAlta?new Date(r.previsaoAlta).toLocaleString('pt-BR'):'Não informada';
-            card.innerHTML='<strong style="display:block;color:#1e3a8a;margin-bottom:7px">🔵 Reserva Cirúrgica com Previsão de Alta</strong>'+
-              '<div><strong>Paciente reservado:</strong> '+esc(r.paciente||'-')+'</div>'+
-              '<div><strong>Prontuário:</strong> '+esc(r.prontuario||'-')+'</div>'+
-              '<div><strong>Data de nascimento:</strong> '+esc(r.nascimento||'-')+'</div>'+
-              '<div><strong>Sexo:</strong> '+esc(r.sexo||'-')+'</div>'+
-              '<div><strong>Perfil:</strong> '+esc(r.perfil||'-')+'</div>'+
-              '<div><strong>Origem:</strong> '+esc(r.origem||'-')+'</div>'+
-              '<div><strong>Previsão de alta do ocupante:</strong> '+esc(prev)+'</div>'+
-              '<button class="btn" id="editar-reserva-prev-v9" style="margin-top:10px;background:#2563eb">✏️ Editar reserva</button>';
-            cont.appendChild(card);
-            card.querySelector('#editar-reserva-prev-v9').onclick=()=>w.editarReservaPrevAltaV9(setor,leito);
+            const btn=d.createElement('button');
+            btn.className='btn';
+            btn.style.cssText='margin-top:10px;background:#2563eb';
+            btn.textContent='✏️ Editar reserva com previsão de alta';
+            btn.onclick=()=>w.editarReservaPrevAltaV9(setor,leito);
+            resumo.appendChild(btn);
           }
         };
 
