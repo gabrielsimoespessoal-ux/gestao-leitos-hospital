@@ -1253,6 +1253,7 @@
             const { doc, onSnapshot } = window.firebaseModules;
             onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
                 if (docSnap.exists()) {
+                    if (multiusuarioStatus === 'salvando') return;
                     const data = docSnap.data();
                     firebaseBaseSnapshotLocal = normalizarFirebaseSeguro(data);
                     firebaseRevisionLocal = Number(data && data._meta && data._meta.revision || 0);
