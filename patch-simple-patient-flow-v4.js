@@ -359,13 +359,69 @@
           d.getElementById('modal-editar-reserva-v9').style.display='flex';
         };
 
+        function abrirAtalhoCadastroNoLeito(setor,leito){
+          const s=w.setoresData.find(x=>x.nome===setor),l=s?.leitos.find(x=>String(x.n)===String(leito));
+          if(!s||!l)return;
+
+          let modal=d.getElementById('modal-atalho-cadastro-leito-v16');
+          if(!modal){
+            modal=d.createElement('div');
+            modal.id='modal-atalho-cadastro-leito-v16';
+            modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:10050;justify-content:center;align-items:center;padding:16px';
+            modal.innerHTML='<div style="background:white;width:520px;max-width:96%;border-radius:12px;padding:20px;box-shadow:0 12px 35px rgba(0,0,0,.25)">'+
+              '<h3 style="margin:0 0 8px;color:#0f172a">Atalho do Leito</h3>'+
+              '<div id="atalho-leito-info-v16" style="font-size:.9rem;color:#475569;margin-bottom:16px"></div>'+
+              '<div style="display:grid;grid-template-columns:1fr;gap:10px">'+
+                '<button class="btn btn-success" id="atalho-cadastrar-v16" style="justify-content:center">➕ Cadastrar paciente neste leito</button>'+
+                '<button class="btn" id="atalho-reservar-v16" style="justify-content:center;background:#2563eb">📌 Fazer reserva neste leito</button>'+
+                '<button class="btn" id="atalho-historico-v16" style="justify-content:center;background:#64748b">🕘 Abrir histórico / gestão do leito</button>'+
+                '<button class="btn" id="atalho-cancel-v16" style="justify-content:center;background:#e2e8f0;color:#334155">Cancelar</button>'+
+              '</div>'+
+            '</div>';
+            d.body.appendChild(modal);
+          }
+
+          d.getElementById('atalho-leito-info-v16').innerHTML='<b>'+esc(setor)+'</b> · Leito <b>'+esc(leito)+'</b> · Status: <b>'+esc(l.status)+'</b>';
+
+          const abrirFormulario=(acao)=>{
+            const set=(id,val)=>{const el=d.getElementById(id);if(el&&val!==undefined&&val!==null)el.value=val;};
+            set('mov-acao',acao);
+            set('mov-setor',setor);
+            if(typeof w.atualizarSelectLeitosMov==='function')w.atualizarSelectLeitosMov();
+            set('mov-leito',leito);
+            set('mov-atendimento','');
+            set('mov-paciente','');
+            set('mov-nascimento','');
+            set('mov-sexo','');
+            set('mov-perfil-vaga','');
+            set('mov-origem','');
+            set('mov-convenio','SUS');
+            set('mov-precaucao','Nenhuma');
+            if(typeof w.alternarCamposCirurgicosMov==='function')w.alternarCamposCirurgicosMov();
+            atualizarRegraProntuario();
+            modal.style.display='none';
+            const movNav=[...d.querySelectorAll('.nav-item')].find(x=>String(x.getAttribute('onclick')||'').includes("movimentacao"));
+            if(typeof w.switchTab==='function')w.switchTab('movimentacao',movNav||null);
+            setTimeout(()=>{
+              d.getElementById('box-form-mov')?.scrollIntoView({behavior:'smooth',block:'start'});
+              d.getElementById('mov-atendimento')?.focus();
+            },80);
+          };
+
+          d.getElementById('atalho-cadastrar-v16').onclick=()=>abrirFormulario('Admissão');
+          d.getElementById('atalho-reservar-v16').onclick=()=>abrirFormulario('Reservado');
+          d.getElementById('atalho-historico-v16').onclick=()=>{modal.style.display='none';oldBedOpen.call(w,setor,leito);};
+          d.getElementById('atalho-cancel-v16').onclick=()=>modal.style.display='none';
+          modal.style.display='flex';
+        }
+
         w.abrirHistoricoPacienteLeito=function(setor,leito){
-          const s=w.setoresData.find(x=>x.nome===setor),l=s?.leitos.find(x=>x.n===leito);
+          const s=w.setoresData.find(x=>x.nome===setor),l=s?.leitos.find(x=>String(x.n)===String(leito));
           if(!l)return;
 
-          // Leito sem paciente: mantém a tela de histórico/gestão do leito.
+          // Leito disponível/higienização/bloqueado: abre atalho com opção de cadastrar/reservar ou ver histórico.
           if(!(l.status==='ocupado'||l.status==='reservado') || !l.prontuario){
-            oldBedOpen.call(w,setor,leito);
+            abrirAtalhoCadastroNoLeito(setor,leito);
             return;
           }
 
@@ -412,7 +468,6 @@
           else body.appendChild(resumo);
 
           if(l.reservaPrevAlta){
-            const r=l.reservaPrevAlta;
             const btn=d.createElement('button');
             btn.className='btn';
             btn.style.cssText='margin-top:10px;background:#2563eb';
