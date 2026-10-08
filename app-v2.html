@@ -296,6 +296,44 @@
             });
         };
 
+        // Migração pontual solicitada: garantir o Leito 15 no setor MENTAL FEMININO.
+        window.garantirLeito15MentalFeminino = async function() {
+            try{
+                const ref=doc(db,'hospital','dados');
+                const agora=new Date();
+                const r=await runTransaction(db,async function(tx){
+                    const snap=await tx.get(ref);
+                    if(!snap.exists()) throw new Error('Banco principal não encontrado.');
+                    const dados=JSON.parse(JSON.stringify(snap.data()));
+                    const setor=(dados.setoresData||[]).find(function(s){return String(s.nome||'').trim().toUpperCase()==='MENTAL FEMININO';});
+                    if(!setor) throw new Error('Setor MENTAL FEMININO não encontrado no banco.');
+                    setor.leitos=Array.isArray(setor.leitos)?setor.leitos:[];
+                    const existe=setor.leitos.some(function(l){return String(l.n).trim()==='15';});
+                    if(existe) return {ok:true,jaExistia:true};
+                    setor.leitos.push({n:'15',status:'disponivel',paciente:'',prontuario:''});
+                    const rev=Number(dados&&dados._meta&&dados._meta.revision||0)+1;
+                    dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),safeguards:'multiuser-v8',editor:(usuarioAtual&&usuarioAtual.nome)||'usuario'};
+                    tx.set(ref,JSON.parse(JSON.stringify(dados)));
+                    return {ok:true,jaExistia:false,revisao:rev};
+                });
+
+                const setorLocal=(setoresData||[]).find(function(s){return String(s.nome||'').trim().toUpperCase()==='MENTAL FEMININO';});
+                if(setorLocal){
+                    setorLocal.leitos=Array.isArray(setorLocal.leitos)?setorLocal.leitos:[];
+                    if(!setorLocal.leitos.some(function(l){return String(l.n).trim()==='15';})){
+                        setorLocal.leitos.push({n:'15',status:'disponivel',paciente:'',prontuario:''});
+                    }
+                }
+                if(typeof renderizarPainelLeitos==='function')renderizarPainelLeitos();
+                if(typeof atualizarSelectsGerais==='function')atualizarSelectsGerais();
+                return r;
+            }catch(e){
+                console.error('Falha ao garantir Leito 15 do MENTAL FEMININO:',e);
+                return false;
+            }
+        };
+        setTimeout(function(){ window.garantirLeito15MentalFeminino(); },1800);
+
         // Alteração operacional de status de leito vazio: disponível / bloqueado / higienização.
         window.executarStatusLeitoAtomico = async function(argsBrutos) {
             const args = JSON.parse(JSON.stringify(argsBrutos || {}));
