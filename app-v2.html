@@ -1242,6 +1242,68 @@
             }
         }
 
+        async function executarBackupPeriodico30Min() {
+            if(!window.db || !window.firebaseModules || !window.firebaseModules.runTransaction) return false;
+            try {
+                const { doc, runTransaction } = window.firebaseModules;
+                var dadosRef = doc(window.db,'hospital','dados');
+                var agendaRef = doc(window.db,'hospital','backup_scheduler_30min');
+                var agora = Date.now();
+                var stamp = new Date(agora).toISOString().replace(/[:.]/g,'-');
+                var backupRef = doc(window.db,'hospital','backup_periodico_'+stamp);
+                var ultimoRef = doc(window.db,'hospital','ultimo_backup_periodico');
+
+                var fez = await runTransaction(window.db, async function(tx){
+                    var agendaSnap = await tx.get(agendaRef);
+                    var dadosSnap = await tx.get(dadosRef);
+                    if(!dadosSnap.exists()) return false;
+
+                    var agenda = agendaSnap.exists() ? agendaSnap.data() : {};
+                    var ultimo = Number(agenda && agenda.lastBackupMs || 0);
+
+                    // Qualquer computador pode tentar, mas somente um consegue reservar a janela de 30 min.
+                    if(ultimo && agora - ultimo < 30*60*1000) return false;
+
+                    var dados = normalizarFirebaseSeguro(dadosSnap.data());
+                    var resumo = contarEstadoProtegido(dados);
+                    var pacote = normalizarFirebaseSeguro({
+                        ...dados,
+                        _backup_meta:{
+                            tipo:'periodico_30min',
+                            criadoEm:new Date(agora).toISOString(),
+                            criadoPor:(usuarioAtual&&usuarioAtual.nome)?usuarioAtual.nome:'cliente_multiusuario',
+                            revisao:Number(dados&&dados._meta&&dados._meta.revision||0),
+                            resumo:resumo
+                        }
+                    });
+
+                    tx.set(backupRef,pacote);
+                    tx.set(ultimoRef,pacote);
+                    tx.set(agendaRef,{
+                        lastBackupMs:agora,
+                        lastBackupAt:new Date(agora).toISOString(),
+                        lastBackupId:'backup_periodico_'+stamp,
+                        by:(usuarioAtual&&usuarioAtual.nome)?usuarioAtual.nome:'cliente_multiusuario'
+                    });
+                    return true;
+                });
+
+                if(fez) {
+                    window.ultimoBackupPeriodicoEm = new Date(agora).toISOString();
+                    console.info('Backup periódico de 30 min concluído:',window.ultimoBackupPeriodicoEm);
+                }
+                return fez;
+            } catch(e) {
+                console.error('Falha no backup periódico de 30 min:',e);
+                return false;
+            }
+        }
+
+        // Verifica a cada minuto se já passaram 30 minutos desde o último backup.
+        // Vários computadores podem executar esta verificação; a transação garante apenas um backup por janela.
+        setTimeout(executarBackupPeriodico30Min,15000);
+        setInterval(executarBackupPeriodico30Min,60000);
+
         function reconciliarSaidasPersistidas() {
             // Segurança: histórico é somente registro/auditoria.
             // Nunca alterar automaticamente a ocupação atual a partir do histórico ao carregar a página.
