@@ -1410,71 +1410,57 @@
           const saidas=['Alta Hospitalar','Alta a Pedido','Evasão','Óbito','Transferência Externa','Disponível'];
           if(saidas.includes(acao)){
             if(!w.confirm('Confirmar '+acao.toUpperCase()+' de '+nome+' no leito '+l.n+' de '+s.nome+'?'))return;
-
-            const norm=x=>String(x||'').trim().toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
-            const nomeNorm=norm(nome);
             const acaoHistorico=acao==='Disponível'?'Liberação de Leito':acao;
-            let reservasPromovidas=0;
-            let vinculosRemovidos=0;
 
-            await registrarEventoAtalhoV13({
-              acao:acaoHistorico,pr,nome,nasc,perfil,sexo,convenio,origem,setor:s.nome,leito:l.n
-            });
-
-            // Limpa TODOS os vínculos ativos do paciente, não apenas o primeiro leito encontrado.
-            (w.setoresData||[]).forEach(setorAtual=>{
-              (setorAtual.leitos||[]).forEach(leitoAtual=>{
-                const mesmoPacientePrincipal =
-                  (pr && leitoAtual.prontuario===pr) ||
-                  (nomeNorm && norm(leitoAtual.paciente)===nomeNorm);
-
-                if(mesmoPacientePrincipal && ['ocupado','reservado'].includes(leitoAtual.status)){
-                  const reservaEspecial=leitoAtual.reservaPrevAlta?{...leitoAtual.reservaPrevAlta}:null;
-                  if(reservaEspecial){
-                    leitoAtual.status='reservado';
-                    leitoAtual.paciente=reservaEspecial.paciente;
-                    leitoAtual.prontuario=reservaEspecial.prontuario;
-                    delete leitoAtual.reservaPrevAlta;
-                    reservasPromovidas++;
-                  }else{
-                    leitoAtual.status='disponivel';
-                    leitoAtual.paciente='';
-                    leitoAtual.prontuario='';
-                  }
-                  vinculosRemovidos++;
-                }
-
-                // Se o paciente que saiu também estava como RESERVA futura em outro leito,
-                // remove essa reserva para impedir que ele reapareça após F5/sincronização.
-                if(leitoAtual.reservaPrevAlta){
-                  const r=leitoAtual.reservaPrevAlta;
-                  const mesmaReserva =
-                    (pr && r.prontuario===pr) ||
-                    (nomeNorm && norm(r.paciente)===nomeNorm);
-                  if(mesmaReserva){
-                    delete leitoAtual.reservaPrevAlta;
-                  }
-                }
+            try{
+              if(typeof w.executarSaidaLeitoAtomica!=='function'){
+                throw new Error('Módulo nativo de saída ainda não carregou. Atualize a página e tente novamente.');
+              }
+              const resultado=await w.executarSaidaLeitoAtomica({
+                acao:acaoHistorico,
+                pr:pr,
+                nome:nome,
+                nasc:nasc,
+                perfil:perfil,
+                sexo:sexo,
+                convenio:convenio,
+                origem:origem,
+                setor:s.nome,
+                leito:l.n,
+                usuario:w.usuarioAtual?.nome||'usuario'
               });
-            });
 
-            // Marca o cadastro como inativo, preservando dados para histórico.
-            if(pr&&w.basePacientesCadastrados?.[pr]){
-              w.basePacientesCadastrados[pr].statusInternacao='encerrado';
-              w.basePacientesCadastrados[pr].motivoSaida=acaoHistorico;
-              w.basePacientesCadastrados[pr].dataSaida=new Date().toISOString();
-              w.basePacientesCadastrados[pr].previsaoAlta='';
+              // Atualiza somente o leito selecionado no estado local.
+              if(resultado?.reservaPromovida){
+                // o snapshot do Firebase trará os dados da reserva promovida; não inventar localmente
+              }else{
+                l.status='disponivel';l.paciente='';l.prontuario='';
+              }
+              if(pr&&w.basePacientesCadastrados?.[pr]){
+                w.basePacientesCadastrados[pr].statusInternacao='encerrado';
+                w.basePacientesCadastrados[pr].motivoSaida=acaoHistorico;
+                w.basePacientesCadastrados[pr].dataSaida=new Date().toISOString();
+                w.basePacientesCadastrados[pr].previsaoAlta='';
+              }
+
+              if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+              if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
+              if(typeof w.atualizarTabelaMovimentacoes==='function')w.atualizarTabelaMovimentacoes();
+              if(typeof w.atualizarTabelaHistoricoGeral==='function')w.atualizarTabelaHistoricoGeral();
+              const modal=d.getElementById('modal-editar-paciente');if(modal)modal.style.display='none';
+
+              w.alert(
+                acaoHistorico+' registrada com sucesso. Somente o leito '+l.n+' foi alterado.'+
+                (resultado?.reservaPromovida?' A reserva futura deste mesmo leito foi promovida.':'')
+              );
+            }catch(e){
+              console.error('Erro na saída atômica:',e);
+              if(e?.code==='CONFLITO_REAL'){
+                w.alert('CONFLITO REAL DETECTADO.\n\n'+e.message+'\n\nAtualize a página para ver o estado mais recente. Nenhum dado foi sobrescrito.');
+              }else{
+                w.alert('Não foi possível concluir a saída com segurança: '+(e?.message||e));
+              }
             }
-
-            await finalizarAtualizacaoAtalhoV13();
-
-            // Força também o espelho específico das reservas a refletir as remoções.
-            if(typeof persistirReservasPrevAltaV11==='function')await persistirReservasPrevAltaV11();
-
-            const detalheReservas=reservasPromovidas
-              ? ' '+reservasPromovidas+' reserva(s) futura(s) foi(ram) mantida(s) como reserva principal.'
-              : '';
-            w.alert(acaoHistorico+' registrada com sucesso. '+vinculosRemovidos+' vínculo(s) ativo(s) removido(s).'+detalheReservas);
             return;
           }
 
