@@ -2553,7 +2553,7 @@
             var totalDisponiveis = 0;
             setoresData.forEach(function(s) {
                 s.leitos.forEach(function(l) {
-                    if (l.status === 'disponivel' || l.status === 'reservado') {
+                    if (l.status === 'disponivel') {
                         totalDisponiveis++;
                         selectModal.innerHTML += '<option value="' + s.nome + '||' + l.n + '">' + s.nome + ' - Leito ' + l.n + ' (' + l.status + ')</option>';
                     }
