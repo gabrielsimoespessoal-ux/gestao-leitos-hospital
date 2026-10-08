@@ -1361,82 +1361,31 @@
             if(!w.confirm('Confirmar ADMISSÃO de '+nome+' no leito '+l.n+' de '+s.nome+'?'))return;
 
             // Fluxo atômico específico para converter RESERVA -> OCUPADO.
-            // Evita falso conflito do merge genérico quando a própria reserva é a base da admissão.
+            // A execução real ocorre dentro do app-v2.html, no mesmo realm do Firebase.
             try{
-              const {doc,runTransaction}=w.firebaseModules||{};
-              if(!w.db||!doc||!runTransaction)throw new Error('Módulo de transação não disponível.');
-              const ref=doc(w.db,'hospital','dados');
-              const agora=new Date();
-              const stamp=agora.toISOString().replace(/[:.]/g,'-');
-              const backupRef=doc(w.db,'hospital','backup_admissao_'+stamp);
-              const auditRef=doc(w.db,'hospital','auditoria_admissao_'+stamp);
+              if(typeof w.executarAdmissaoReservaAtomica!=='function'){
+                throw new Error('Módulo nativo de admissão ainda não carregou. Atualize a página e tente novamente.');
+              }
 
-              const resultado=await runTransaction(w.db,async tx=>{
-                const snap=await tx.get(ref);
-                if(!snap.exists())throw new Error('Banco principal não encontrado.');
-                const dados=w.JSON.parse(w.JSON.stringify(snap.data()));
-                const setorRemoto=(dados.setoresData||[]).find(x=>x.nome===s.nome);
-                const leitoRemoto=setorRemoto?.leitos?.find(x=>String(x.n)===String(l.n));
-                if(!leitoRemoto)throw new Error('Leito não encontrado no banco.');
-
-                if(leitoRemoto.status==='ocupado'&&String(leitoRemoto.prontuario||'')===String(pr)){
-                  return {jaAdmitido:true,dados};
-                }
-                if(!['reservado','disponivel'].includes(leitoRemoto.status)){
-                  const e=new Error('O leito mudou de status em outro computador. Status atual: '+leitoRemoto.status);
-                  e.code='CONFLITO_REAL';throw e;
-                }
-                if(leitoRemoto.status==='reservado'&&leitoRemoto.prontuario&&String(leitoRemoto.prontuario)!==String(pr)){
-                  const e=new Error('O leito está reservado para outro prontuário.');
-                  e.code='CONFLITO_REAL';throw e;
-                }
-
-                const backup=w.JSON.parse(w.JSON.stringify({...dados,_backup_meta:{tipo:'antes_admissao_reserva',criadoEm:agora.toISOString(),setor:s.nome,leito:l.n,prontuario:pr}}));
-                tx.set(backupRef,backup);
-
-                leitoRemoto.status='ocupado';
-                leitoRemoto.paciente=nome;
-                leitoRemoto.prontuario=pr;
-
-                dados.basePacientesCadastrados=dados.basePacientesCadastrados||{};
-                dados.basePacientesCadastrados[pr]={
-                  ...(dados.basePacientesCadastrados[pr]||{}),
-                  nome,nascimento:nasc,perfil,sexo,convenio,origem,
-                  statusInternacao:'ativo',
-                  dataAdmissao:agora.toISOString()
-                };
-                delete dados.basePacientesCadastrados[pr].motivoSaida;
-                delete dados.basePacientesCadastrados[pr].dataSaida;
-
-                dados.movimentacoesHistorico=Array.isArray(dados.movimentacoesHistorico)?dados.movimentacoesHistorico:[];
-                const hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-                const dataTxt=agora.toLocaleDateString('pt-BR')+' '+hora;
-                dados.movimentacoesHistorico.unshift({
-                  data:dataTxt,dataIso:agora.toISOString(),hora,
-                  atendimentoNasc:'Pront: '+pr+'<br><small>Nasc: '+nasc+'</small>',
-                  atendimento:pr,nascimento:nasc,paciente:nome,
-                  setor:s.nome+' (Leito '+l.n+')',
-                  origem:origem||s.nome,destino:s.nome,
-                  perfil:(perfil||'-')+(sexo?' ('+sexo+')':''),
-                  convenio:convenio||'-',
-                  acao:'Admissão',
-                  dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString(),dataAdmissaoObj:agora.toISOString()
-                });
-
-                const rev=Number(dados?._meta?.revision||0)+1;
-                dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),safeguards:'multiuser-v2',editor:w.usuarioAtual?.nome||'usuario'};
-
-                const dadosPlain=w.JSON.parse(w.JSON.stringify(dados));
-                const auditoriaPlain=w.JSON.parse(w.JSON.stringify({tipo:'admissao_reserva_atomica',criadoEm:agora.toISOString(),setor:s.nome,leito:l.n,prontuario:pr,paciente:nome,usuario:w.usuarioAtual?.nome||'usuario',revisao:rev}));
-                tx.set(ref,dadosPlain);
-                tx.set(auditRef,auditoriaPlain);
-                return {jaAdmitido:false,dados};
+              const resultado=await w.executarAdmissaoReservaAtomica({
+                setor:s.nome,
+                leito:l.n,
+                pr:pr,
+                nome:nome,
+                nasc:nasc,
+                perfil:perfil,
+                sexo:sexo,
+                convenio:convenio,
+                origem:origem,
+                usuario:w.usuarioAtual?.nome||'usuario'
               });
 
-              // Reflete imediatamente o estado confirmado no navegador.
               l.status='ocupado';l.paciente=nome;l.prontuario=pr;
               if(!w.basePacientesCadastrados[pr])w.basePacientesCadastrados[pr]={};
-              Object.assign(w.basePacientesCadastrados[pr],{nome,nascimento:nasc,perfil,sexo,convenio,origem,statusInternacao:'ativo',dataAdmissao:new Date().toISOString()});
+              Object.assign(w.basePacientesCadastrados[pr],{
+                nome,nascimento:nasc,perfil,sexo,convenio,origem,
+                statusInternacao:'ativo',dataAdmissao:new Date().toISOString()
+              });
 
               if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
               if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
@@ -1444,7 +1393,9 @@
               if(typeof w.atualizarTabelaHistoricoGeral==='function')w.atualizarTabelaHistoricoGeral();
               const modal=d.getElementById('modal-editar-paciente');if(modal)modal.style.display='none';
 
-              w.alert(resultado?.jaAdmitido?'Este paciente já constava como admitido no banco.':'Admissão registrada. A reserva do leito '+l.n+' foi convertida em OCUPAÇÃO.');
+              w.alert(resultado?.jaAdmitido
+                ? 'Este paciente já constava como admitido no banco.'
+                : 'Admissão registrada. A reserva do leito '+l.n+' foi convertida em OCUPAÇÃO.');
             }catch(e){
               console.error('Erro na admissão atômica da reserva:',e);
               if(e?.code==='CONFLITO_REAL'){
