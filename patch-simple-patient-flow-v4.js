@@ -1374,7 +1374,7 @@
               const resultado=await runTransaction(w.db,async tx=>{
                 const snap=await tx.get(ref);
                 if(!snap.exists())throw new Error('Banco principal não encontrado.');
-                const dados=JSON.parse(JSON.stringify(snap.data()));
+                const dados=w.JSON.parse(w.JSON.stringify(snap.data()));
                 const setorRemoto=(dados.setoresData||[]).find(x=>x.nome===s.nome);
                 const leitoRemoto=setorRemoto?.leitos?.find(x=>String(x.n)===String(l.n));
                 if(!leitoRemoto)throw new Error('Leito não encontrado no banco.');
@@ -1391,7 +1391,7 @@
                   e.code='CONFLITO_REAL';throw e;
                 }
 
-                const backup=JSON.parse(JSON.stringify({...dados,_backup_meta:{tipo:'antes_admissao_reserva',criadoEm:agora.toISOString(),setor:s.nome,leito:l.n,prontuario:pr}}));
+                const backup=w.JSON.parse(w.JSON.stringify({...dados,_backup_meta:{tipo:'antes_admissao_reserva',criadoEm:agora.toISOString(),setor:s.nome,leito:l.n,prontuario:pr}}));
                 tx.set(backupRef,backup);
 
                 leitoRemoto.status='ocupado';
@@ -1426,8 +1426,8 @@
                 const rev=Number(dados?._meta?.revision||0)+1;
                 dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),safeguards:'multiuser-v2',editor:w.usuarioAtual?.nome||'usuario'};
 
-                const dadosPlain=JSON.parse(JSON.stringify(dados));
-                const auditoriaPlain=JSON.parse(JSON.stringify({tipo:'admissao_reserva_atomica',criadoEm:agora.toISOString(),setor:s.nome,leito:l.n,prontuario:pr,paciente:nome,usuario:w.usuarioAtual?.nome||'usuario',revisao:rev}));
+                const dadosPlain=w.JSON.parse(w.JSON.stringify(dados));
+                const auditoriaPlain=w.JSON.parse(w.JSON.stringify({tipo:'admissao_reserva_atomica',criadoEm:agora.toISOString(),setor:s.nome,leito:l.n,prontuario:pr,paciente:nome,usuario:w.usuarioAtual?.nome||'usuario',revisao:rev}));
                 tx.set(ref,dadosPlain);
                 tx.set(auditRef,auditoriaPlain);
                 return {jaAdmitido:false,dados};
