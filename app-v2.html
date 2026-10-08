@@ -169,8 +169,19 @@
                 if(!snap.exists()) throw new Error('Banco principal não encontrado.');
                 const dados = JSON.parse(JSON.stringify(snap.data()));
                 const setor = (dados.setoresData||[]).find(function(x){return x.nome===args.setor;});
-                const leito = setor && (setor.leitos||[]).find(function(x){return String(x.n)===String(args.leito);});
-                if(!leito) throw new Error('Leito não encontrado no banco.');
+                if(!setor) throw new Error('Setor não encontrado no banco.');
+                let leito = (setor.leitos||[]).find(function(x){return String(x.n)===String(args.leito);});
+                if(!leito){
+                    const setorLocal = (setoresData||[]).find(function(x){return x.nome===args.setor;});
+                    const leitoLocal = setorLocal && (setorLocal.leitos||[]).find(function(x){return String(x.n)===String(args.leito);});
+                    if(leitoLocal){
+                        leito = {n:String(args.leito),status:'disponivel',paciente:'',prontuario:''};
+                        setor.leitos = Array.isArray(setor.leitos) ? setor.leitos : [];
+                        setor.leitos.push(leito);
+                    } else {
+                        throw new Error('Leito não encontrado no banco.');
+                    }
+                }
 
                 const ehReserva = args.acao==='Reservado' || args.acao==='Reserva Cirúrgica Eletiva';
                 const statusDestino = ehReserva ? 'reservado' : 'ocupado';
@@ -242,6 +253,47 @@
                 return {ok:true,status:statusDestino,revisao:rev};
             });
             return JSON.parse(JSON.stringify(resultado));
+        };
+
+        window.adicionarLeitoAtomico = async function(setorNome, leitoNome) {
+            setorNome=String(setorNome||'').trim(); leitoNome=String(leitoNome||'').trim();
+            if(!setorNome||!leitoNome) throw new Error('Informe setor e leito.');
+            const ref=doc(db,'hospital','dados'), agora=new Date();
+            return await runTransaction(db,async function(tx){
+                const snap=await tx.get(ref);
+                if(!snap.exists()) throw new Error('Banco principal não encontrado.');
+                const dados=JSON.parse(JSON.stringify(snap.data()));
+                const setor=(dados.setoresData||[]).find(function(s){return s.nome===setorNome;});
+                if(!setor) throw new Error('Setor não encontrado no banco.');
+                setor.leitos=Array.isArray(setor.leitos)?setor.leitos:[];
+                if(!setor.leitos.some(function(l){return String(l.n)===leitoNome;})){
+                    setor.leitos.push({n:leitoNome,status:'disponivel',paciente:'',prontuario:''});
+                }
+                const rev=Number(dados&&dados._meta&&dados._meta.revision||0)+1;
+                dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),safeguards:'multiuser-v7',editor:(usuarioAtual&&usuarioAtual.nome)||'usuario'};
+                tx.set(ref,JSON.parse(JSON.stringify(dados)));
+                return {ok:true,revisao:rev};
+            });
+        };
+
+        window.excluirLeitoAtomico = async function(setorNome, leitoNome) {
+            setorNome=String(setorNome||'').trim(); leitoNome=String(leitoNome||'').trim();
+            const ref=doc(db,'hospital','dados'), agora=new Date();
+            return await runTransaction(db,async function(tx){
+                const snap=await tx.get(ref);
+                if(!snap.exists()) throw new Error('Banco principal não encontrado.');
+                const dados=JSON.parse(JSON.stringify(snap.data()));
+                const setor=(dados.setoresData||[]).find(function(s){return s.nome===setorNome;});
+                if(!setor) throw new Error('Setor não encontrado no banco.');
+                const leito=(setor.leitos||[]).find(function(l){return String(l.n)===leitoNome;});
+                if(!leito) return {ok:true};
+                if(leito.status==='ocupado'||leito.status==='reservado') throw new Error('Não é permitido excluir leito ocupado ou reservado.');
+                setor.leitos=(setor.leitos||[]).filter(function(l){return String(l.n)!==leitoNome;});
+                const rev=Number(dados&&dados._meta&&dados._meta.revision||0)+1;
+                dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),safeguards:'multiuser-v7',editor:(usuarioAtual&&usuarioAtual.nome)||'usuario'};
+                tx.set(ref,JSON.parse(JSON.stringify(dados)));
+                return {ok:true,revisao:rev};
+            });
         };
 
         // Alteração operacional de status de leito vazio: disponível / bloqueado / higienização.
@@ -2753,28 +2805,36 @@
             if(idx !== -1) { setoresData.splice(idx, 1); renderizarPainelLeitos(); salvarDadosNoFirebase(); alert('Excluído.'); }
         }
 
-        function adicionarNovoLeitoSetor() {
+        async function adicionarNovoLeitoSetor() {
             if(usuarioAtual.perfil !== 'Administrador') { alert('Acesso restrito.'); return; }
-            var setorNome = document.getElementById('admin-setor-alvo').value;
-            var lNome = document.getElementById('admin-novo-leito-nome').value.trim();
-            var sObj = setoresData.find(function(s) { return s.nome === setorNome; });
-            if(sObj && lNome) {
-                sObj.leitos.push({ n: lNome, status: 'disponivel', paciente: '', prontuario: '' });
-                renderizarPainelLeitos();
-                salvarDadosNoFirebase();
-                alert('Leito adicionado!');
-            }
+            var setorNome=document.getElementById('admin-setor-alvo').value;
+            var lNome=document.getElementById('admin-novo-leito-nome').value.trim();
+            if(!setorNome||!lNome){alert('Informe o setor e o nome/número do leito.');return;}
+            try{
+                await window.adicionarLeitoAtomico(setorNome,lNome);
+                var sObj=setoresData.find(function(s){return s.nome===setorNome;});
+                if(sObj&&!sObj.leitos.some(function(l){return String(l.n)===String(lNome);})){
+                    sObj.leitos.push({n:lNome,status:'disponivel',paciente:'',prontuario:''});
+                }
+                renderizarPainelLeitos(); atualizarSelectsGerais(); atualizarSelectLeitosAdmin();
+                document.getElementById('admin-novo-leito-nome').value='';
+                alert('Leito adicionado e gravado no banco com sucesso.');
+            }catch(e){console.error(e);alert('Não foi possível adicionar o leito: '+(e&&e.message?e.message:e));}
         }
 
-        function excluirLeitoEspecifico() {
+        async function excluirLeitoEspecifico() {
             if(usuarioAtual.perfil !== 'Administrador') { alert('Acesso restrito.'); return; }
-            var setorNome = document.getElementById('admin-setor-alvo').value;
-            var lNum = document.getElementById('admin-leito-excluir').value;
-            var sObj = setoresData.find(function(s) { return s.nome === setorNome; });
-            if(sObj) {
-                var idx = sObj.leitos.findIndex(function(l) { return l.n === lNum; });
-                if(idx !== -1) { sObj.leitos.splice(idx, 1); renderizarPainelLeitos(); salvarDadosNoFirebase(); alert('Leito excluído.'); }
-            }
+            var setorNome=document.getElementById('admin-setor-alvo').value;
+            var lNum=document.getElementById('admin-leito-excluir').value;
+            if(!setorNome||!lNum)return;
+            if(!confirm('Excluir o leito '+lNum+' de '+setorNome+'?'))return;
+            try{
+                await window.excluirLeitoAtomico(setorNome,lNum);
+                var sObj=setoresData.find(function(s){return s.nome===setorNome;});
+                if(sObj)sObj.leitos=sObj.leitos.filter(function(l){return String(l.n)!==String(lNum);});
+                renderizarPainelLeitos(); atualizarSelectsGerais(); atualizarSelectLeitosAdmin();
+                alert('Leito excluído do banco com sucesso.');
+            }catch(e){console.error(e);alert('Não foi possível excluir o leito: '+(e&&e.message?e.message:e));}
         }
 
         function exportarExcelIndicadores() {
