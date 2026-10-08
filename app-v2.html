@@ -244,6 +244,77 @@
             return JSON.parse(JSON.stringify(resultado));
         };
 
+        // Alteração operacional de status de leito vazio: disponível / bloqueado / higienização.
+        window.executarStatusLeitoAtomico = async function(argsBrutos) {
+            const args = JSON.parse(JSON.stringify(argsBrutos || {}));
+            const permitidos = ['disponivel','bloqueado','higienizacao'];
+            if(!permitidos.includes(args.statusDestino)) throw new Error('Status de destino inválido.');
+
+            const agora = new Date();
+            const ref = doc(db,'hospital','dados');
+            const stamp = agora.toISOString().replace(/[:.]/g,'-');
+            const backupRef = doc(db,'hospital','backup_status_leito_'+stamp);
+            const auditRef = doc(db,'hospital','auditoria_status_leito_'+stamp);
+
+            const snapAntes = await getDoc(ref);
+            if(!snapAntes.exists()) throw new Error('Banco principal não encontrado.');
+            const remotoAntes = JSON.parse(JSON.stringify(snapAntes.data()));
+            await setDoc(backupRef, JSON.parse(JSON.stringify({
+                ...remotoAntes,
+                _backup_meta:{
+                    tipo:'antes_status_leito',
+                    criadoEm:agora.toISOString(),
+                    setor:args.setor, leito:args.leito,
+                    statusDestino:args.statusDestino
+                }
+            })));
+
+            const resultado = await runTransaction(db, async function(tx){
+                const snap = await tx.get(ref);
+                if(!snap.exists()) throw new Error('Banco principal não encontrado.');
+                const dados = JSON.parse(JSON.stringify(snap.data()));
+                const setor = (dados.setoresData||[]).find(function(x){return x.nome===args.setor;});
+                const leito = setor && (setor.leitos||[]).find(function(x){return String(x.n)===String(args.leito);});
+                if(!leito) throw new Error('Leito não encontrado no banco.');
+
+                if(leito.status==='ocupado' || leito.status==='reservado'){
+                    const e = new Error('Este leito está '+leito.status+' e não pode ser alterado por este atalho.');
+                    e.code='LEITO_EM_USO';
+                    throw e;
+                }
+
+                const statusAnterior = leito.status;
+                leito.status = args.statusDestino;
+                leito.paciente = '';
+                leito.prontuario = '';
+
+                dados.movimentacoesHistorico = Array.isArray(dados.movimentacoesHistorico)?dados.movimentacoesHistorico:[];
+                const hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+                const dataTxt=agora.toLocaleDateString('pt-BR')+' '+hora;
+                const nomes={bloqueado:'Bloqueio de Leito',higienizacao:'Aguardando Higienização',disponivel:'Liberação de Leito'};
+                dados.movimentacoesHistorico.unshift({
+                    data:dataTxt,dataIso:agora.toISOString(),hora:hora,
+                    atendimento:'-',nascimento:'',paciente:'Gestão de Leito',
+                    setor:args.setor+' (Leito '+args.leito+')',
+                    origem:args.setor,destino:args.setor,
+                    perfil:'Gestão de Leitos',convenio:'-',
+                    acao:nomes[args.statusDestino]||'Alteração de Leito',
+                    dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString()
+                });
+
+                const rev=Number(dados&&dados._meta&&dados._meta.revision||0)+1;
+                dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),safeguards:'multiuser-v6',editor:args.usuario||'usuario'};
+                tx.set(ref,JSON.parse(JSON.stringify(dados)));
+                tx.set(auditRef,JSON.parse(JSON.stringify({
+                    tipo:'status_leito_atomico',criadoEm:agora.toISOString(),
+                    setor:args.setor,leito:args.leito,statusAnterior:statusAnterior,
+                    statusDestino:args.statusDestino,usuario:args.usuario||'usuario',revisao:rev
+                })));
+                return {ok:true,status:args.statusDestino,revisao:rev};
+            });
+            return JSON.parse(JSON.stringify(resultado));
+        };
+
         // Saída hospitalar atômica e restrita ao leito selecionado.
         window.executarSaidaLeitoAtomica = async function(argsBrutos) {
             const args = JSON.parse(JSON.stringify(argsBrutos || {}));
