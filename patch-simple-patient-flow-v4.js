@@ -618,7 +618,7 @@
             if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
             if(typeof w.atualizarSelectsGerais==='function')w.atualizarSelectsGerais();
             if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
-            console.info('Estrutura complementar carregada apenas em memória; nenhum salvamento automático no carregamento.');
+            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
           }else{
             if(typeof w.atualizarSelectsGerais==='function')w.atualizarSelectsGerais();
           }
@@ -1537,113 +1537,6 @@
         garantirCampoPrevisaoAltaV14();
         setTimeout(garantirCampoPrevisaoAltaV14,1000);
         setTimeout(()=>{if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();},1200);
-
-        // --- RECUPERAÇÃO CONTROLADA: UTI IRMÃ DULCE (SUS) ---
-        // Restaura apenas admissões ativas deste setor que foram apagadas indevidamente.
-        function tsMovV15(m){
-          try{
-            if(m?.dataIso){const t=Date.parse(m.dataIso);if(!isNaN(t))return t;}
-            if(m?.dataDesfechoObj){
-              const v=m.dataDesfechoObj;
-              if(v instanceof Date&&!isNaN(v))return v.getTime();
-              const t=Date.parse(v);if(!isNaN(t))return t;
-            }
-            const s=String(m?.data||'').trim();
-            const mm=s.match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
-            if(mm)return new Date(+mm[3],+mm[2]-1,+mm[1],+(mm[4]||0),+(mm[5]||0)).getTime();
-          }catch(e){}
-          return 0;
-        }
-        function acaoTxtV15(m){return String(m?.acao||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();}
-        function ehEntradaV15(m){
-          const a=acaoTxtV15(m);
-          return a.includes('Admissão')||a.includes('Transferência Interna');
-        }
-        function ehSaidaV15(m){
-          const a=acaoTxtV15(m);
-          return ['Alta Hospitalar','Alta a Pedido','Óbito','Evasão','Transferência Externa','Liberação de Leito'].some(x=>a.includes(x));
-        }
-        function setorMovV15(m){return String(m?.destino||m?.setor||'').toUpperCase();}
-        function leitoMovV15(m){
-          const s=String(m?.setor||'');
-          const mt=s.match(/LEITO\s*([A-Z0-9]+)/i);
-          return mt?String(mt[1]).toUpperCase():'';
-        }
-        async function recuperarAdmissoesUtiSusV15(){
-          const alvo='UTI IRMÃ DULCE (SUS)';
-          const alvoNorm=alvo.toUpperCase();
-          const setor=(w.setoresData||[]).find(s=>String(s.nome||'').toUpperCase()===alvoNorm);
-          if(!setor||!Array.isArray(w.movimentacoesHistorico))return;
-
-          const hist=[...w.movimentacoesHistorico];
-          const ultimoPorPr={};
-          hist.forEach(m=>{
-            const pr=String(m.atendimento||'').trim();
-            if(!pr||pr==='-')return;
-            const t=tsMovV15(m);
-            if(!ultimoPorPr[pr]||t>ultimoPorPr[pr].t)ultimoPorPr[pr]={m,t};
-          });
-
-          const candidatos={};
-          hist.forEach(m=>{
-            const pr=String(m.atendimento||'').trim();
-            if(!pr||pr==='-'||!ehEntradaV15(m))return;
-            const setorTxt=setorMovV15(m);
-            const leito=leitoMovV15(m);
-            if(!setorTxt.includes(alvoNorm)||!leito)return;
-            const t=tsMovV15(m);
-            const ult=ultimoPorPr[pr];
-            // só restaura se o evento mais recente do prontuário continua sendo uma entrada ativa na própria UTI
-            if(!ult||ehSaidaV15(ult.m)||!ehEntradaV15(ult.m)||!setorMovV15(ult.m).includes(alvoNorm))return;
-            if(!candidatos[leito]||t>candidatos[leito].t)candidatos[leito]={m,t};
-          });
-
-          let alterou=false, restaurados=[];
-          Object.entries(candidatos).forEach(([num,obj])=>{
-            const m=obj.m;
-            const l=setor.leitos.find(x=>String(x.n).toUpperCase()===num);
-            if(!l)return;
-            const pr=String(m.atendimento||'').trim();
-            const nome=String(m.paciente||'').trim();
-            if(!pr||!nome)return;
-
-            // NÃO sobrescreve um leito já ocupado/reservado por outro paciente.
-            if((l.status==='ocupado'||l.status==='reservado')&&l.prontuario&&l.prontuario!==pr)return;
-
-            if(l.status!=='ocupado'||l.prontuario!==pr||l.paciente!==nome){
-              l.status='ocupado';
-              l.prontuario=pr;
-              l.paciente=nome;
-              alterou=true;
-              restaurados.push('Leito '+l.n+' — '+nome);
-            }
-            if(!w.basePacientesCadastrados[pr])w.basePacientesCadastrados[pr]={};
-            Object.assign(w.basePacientesCadastrados[pr],{
-              nome:nome,
-              nascimento:m.nascimento||w.basePacientesCadastrados[pr].nascimento||'',
-              perfil:String(m.perfil||'').replace(/\s*\([^)]*\)\s*$/,'')||w.basePacientesCadastrados[pr].perfil||'UTI Clínica',
-              statusInternacao:'ativo'
-            });
-            delete w.basePacientesCadastrados[pr].motivoSaida;
-            delete w.basePacientesCadastrados[pr].dataSaida;
-          });
-
-          if(alterou){
-            if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
-            if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
-            if(typeof w.atualizarTabelaMovimentacoes==='function')w.atualizarTabelaMovimentacoes();
-            if(typeof w.atualizarTabelaHistoricoGeral==='function')w.atualizarTabelaHistoricoGeral();
-            if(typeof w.salvarDadosNoFirebase==='function'){
-              const ok=await w.salvarDadosNoFirebase(true);
-              console.info('UTI SUS restaurada:',restaurados,'salvo=',ok);
-            }
-          }
-        }
-
-        // Executa após o carregamento/sincronização inicial do Firebase.
-        // Recuperação automática desativada para impedir qualquer sobrescrita durante o carregamento.
-        w.recuperarAdmissoesUtiSusV15 = recuperarAdmissoesUtiSusV15;
-
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
         function pintarConflito(){if(!perfilEl||!setorEl)return;const bad=!perfilCompativel(setorEl.value,perfilEl.value);perfilEl.style.borderColor=bad?'#ef4444':'';perfilEl.style.background=bad?'#fff1f2':'';}
