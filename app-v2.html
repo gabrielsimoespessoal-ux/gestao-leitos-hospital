@@ -1120,54 +1120,9 @@
         }
 
         function reconciliarSaidasPersistidas() {
-            var alterou = false;
-            try {
-                var saidas = ['Alta Hospitalar','Alta a Pedido','Evasão','Óbito','Transferência Externa','Liberação de Leito','Disponível'];
-                var ultimoPorProntuario = {};
-                movimentacoesHistorico.forEach(function(m) {
-                    var pr = String(m.atendimento || '').trim();
-                    if(!pr || pr === '-') return;
-                    if(!ultimoPorProntuario[pr]) ultimoPorProntuario[pr] = m;
-                });
-
-                Object.keys(ultimoPorProntuario).forEach(function(pr) {
-                    var m = ultimoPorProntuario[pr];
-                    var acaoTxt = String(m.acao || '').replace(/<[^>]*>/g,' ').trim();
-                    var encerrou = saidas.some(function(s) { return acaoTxt.indexOf(s) !== -1; });
-                    if(!encerrou) return;
-
-                    setoresData.forEach(function(setor) {
-                        setor.leitos.forEach(function(leito) {
-                            if(leito.prontuario !== pr) return;
-                            if(leito.status !== 'ocupado' && leito.status !== 'reservado') return;
-
-                            if(leito.reservaPrevAlta && leito.reservaPrevAlta.prontuario !== pr) {
-                                leito.status = 'reservado';
-                                alterou = true;
-                                leito.paciente = leito.reservaPrevAlta.paciente || '';
-                                leito.prontuario = leito.reservaPrevAlta.prontuario || '';
-                                delete leito.reservaPrevAlta;
-                            } else {
-                                leito.status = 'disponivel';
-                                alterou = true;
-                                leito.paciente = '';
-                                leito.prontuario = '';
-                                if(leito.reservaPrevAlta && leito.reservaPrevAlta.prontuario === pr) delete leito.reservaPrevAlta;
-                            }
-                        });
-                    });
-
-                    if(basePacientesCadastrados[pr]) {
-                        if (basePacientesCadastrados[pr].statusInternacao !== 'encerrado') alterou = true;
-                        basePacientesCadastrados[pr].statusInternacao = 'encerrado';
-                        basePacientesCadastrados[pr].motivoSaida = acaoTxt;
-                        basePacientesCadastrados[pr].previsaoAlta = '';
-                    }
-                });
-            } catch (e) {
-                console.error('Erro ao reconciliar saídas persistidas:', e);
-            }
-            return alterou;
+            // Segurança: histórico é somente registro/auditoria.
+            // Nunca alterar automaticamente a ocupação atual a partir do histórico ao carregar a página.
+            return false;
         }
 
         function carregarDadosDoFirebase() {
