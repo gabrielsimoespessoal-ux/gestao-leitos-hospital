@@ -1275,6 +1275,22 @@
                 }
             });
         }
+        function atualizarBadgeMultiusuario() {
+            var el=document.getElementById('multiuser-status-badge');
+            if(!el)return;
+            if(multiusuarioStatus==='salvando') {
+                el.textContent='● Salvando...';
+                el.style.background='rgba(245,158,11,.28)';
+            } else if(multiusuarioStatus==='conflito') {
+                el.textContent='● Conflito protegido';
+                el.style.background='rgba(239,68,68,.30)';
+            } else {
+                el.textContent='● Sincronizado';
+                el.style.background='rgba(16,185,129,.28)';
+            }
+        }
+        setInterval(atualizarBadgeMultiusuario,500);
+
         // ---------------------------------------------
 
         function cadastrarNovoMedicoLocal() {
