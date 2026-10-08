@@ -1391,7 +1391,7 @@
                   e.code='CONFLITO_REAL';throw e;
                 }
 
-                const backup={...dados,_backup_meta:{tipo:'antes_admissao_reserva',criadoEm:agora.toISOString(),setor:s.nome,leito:l.n,prontuario:pr}};
+                const backup=JSON.parse(JSON.stringify({...dados,_backup_meta:{tipo:'antes_admissao_reserva',criadoEm:agora.toISOString(),setor:s.nome,leito:l.n,prontuario:pr}}));
                 tx.set(backupRef,backup);
 
                 leitoRemoto.status='ocupado';
@@ -1426,8 +1426,10 @@
                 const rev=Number(dados?._meta?.revision||0)+1;
                 dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),safeguards:'multiuser-v2',editor:w.usuarioAtual?.nome||'usuario'};
 
-                tx.set(ref,dados);
-                tx.set(auditRef,{tipo:'admissao_reserva_atomica',criadoEm:agora.toISOString(),setor:s.nome,leito:l.n,prontuario:pr,paciente:nome,usuario:w.usuarioAtual?.nome||'usuario',revisao:rev});
+                const dadosPlain=JSON.parse(JSON.stringify(dados));
+                const auditoriaPlain=JSON.parse(JSON.stringify({tipo:'admissao_reserva_atomica',criadoEm:agora.toISOString(),setor:s.nome,leito:l.n,prontuario:pr,paciente:nome,usuario:w.usuarioAtual?.nome||'usuario',revisao:rev}));
+                tx.set(ref,dadosPlain);
+                tx.set(auditRef,auditoriaPlain);
                 return {jaAdmitido:false,dados};
               });
 
