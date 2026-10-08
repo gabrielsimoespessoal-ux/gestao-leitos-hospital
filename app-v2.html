@@ -143,7 +143,108 @@
         };
 
 
-                // Saída hospitalar atômica e restrita ao leito selecionado.
+                // Admissão / reserva pelo formulário principal, persistida atomicamente.
+        window.executarEntradaLeitoAtomica = async function(argsBrutos) {
+            const args = JSON.parse(JSON.stringify(argsBrutos || {}));
+            const agora = new Date();
+            const ref = doc(db,'hospital','dados');
+            const stamp = agora.toISOString().replace(/[:.]/g,'-');
+            const backupRef = doc(db,'hospital','backup_entrada_'+stamp);
+            const auditRef = doc(db,'hospital','auditoria_entrada_'+stamp);
+
+            const snapAntes = await getDoc(ref);
+            if(!snapAntes.exists()) throw new Error('Banco principal não encontrado.');
+            const remotoAntes = JSON.parse(JSON.stringify(snapAntes.data()));
+            await setDoc(backupRef, JSON.parse(JSON.stringify({
+                ...remotoAntes,
+                _backup_meta:{
+                    tipo:'antes_entrada_leito',
+                    criadoEm:agora.toISOString(),
+                    setor:args.setor,leito:args.leito,prontuario:args.pr,acao:args.acao
+                }
+            })));
+
+            const resultado = await runTransaction(db, async function(tx){
+                const snap = await tx.get(ref);
+                if(!snap.exists()) throw new Error('Banco principal não encontrado.');
+                const dados = JSON.parse(JSON.stringify(snap.data()));
+                const setor = (dados.setoresData||[]).find(function(x){return x.nome===args.setor;});
+                const leito = setor && (setor.leitos||[]).find(function(x){return String(x.n)===String(args.leito);});
+                if(!leito) throw new Error('Leito não encontrado no banco.');
+
+                const ehReserva = args.acao==='Reservado' || args.acao==='Reserva Cirúrgica Eletiva';
+                const statusDestino = ehReserva ? 'reservado' : 'ocupado';
+
+                if(!['disponivel','reservado','ocupado'].includes(leito.status)){
+                    const e=new Error('Leito indisponível. Status atual: '+leito.status);
+                    e.code='CONFLITO_REAL';throw e;
+                }
+                if(leito.status==='ocupado' && String(leito.prontuario||'')!==String(args.pr||'')){
+                    const e=new Error('O leito já está ocupado por outro paciente.');
+                    e.code='CONFLITO_REAL';throw e;
+                }
+                if(leito.status==='reservado' && leito.prontuario && String(leito.prontuario)!==String(args.pr||'')){
+                    const e=new Error('O leito está reservado para outro paciente.');
+                    e.code='CONFLITO_REAL';throw e;
+                }
+
+                // Na admissão, remove apenas outro vínculo ocupado do MESMO prontuário.
+                if(statusDestino==='ocupado'){
+                    (dados.setoresData||[]).forEach(function(s){
+                        (s.leitos||[]).forEach(function(l){
+                            if(!(s.nome===args.setor && String(l.n)===String(args.leito)) &&
+                               l.status==='ocupado' && String(l.prontuario||'')===String(args.pr||'')){
+                                l.status='disponivel';l.paciente='';l.prontuario='';
+                            }
+                        });
+                    });
+                }
+
+                leito.status=statusDestino;
+                leito.paciente=args.nome||'';
+                leito.prontuario=args.pr||'';
+
+                dados.basePacientesCadastrados=dados.basePacientesCadastrados||{};
+                dados.basePacientesCadastrados[args.pr]={
+                    ...(dados.basePacientesCadastrados[args.pr]||{}),
+                    nome:args.nome||'',nascimento:args.nasc||'',sexo:args.sexo||'',
+                    perfil:args.perfil||'',convenio:args.convenio||'',origem:args.origem||'',
+                    precaucao:args.precaucao||'Nenhuma',
+                    previsaoAlta:args.previsaoAlta||'',
+                    statusInternacao: statusDestino==='ocupado'?'ativo':'reservado',
+                    dataAdmissao: statusDestino==='ocupado' ? agora.toISOString() :
+                        (dados.basePacientesCadastrados[args.pr]?.dataAdmissao||'')
+                };
+
+                dados.movimentacoesHistorico=Array.isArray(dados.movimentacoesHistorico)?dados.movimentacoesHistorico:[];
+                const hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+                const dataTxt=agora.toLocaleDateString('pt-BR')+' '+hora;
+                dados.movimentacoesHistorico.unshift({
+                    data:dataTxt,dataIso:agora.toISOString(),hora:hora,
+                    atendimentoNasc:'Pront: '+(args.pr||'-')+'<br><small>Nasc: '+(args.nasc||'-')+'</small>',
+                    atendimento:args.pr||'-',nascimento:args.nasc||'',paciente:args.nome||'-',
+                    setor:args.setor+' (Leito '+args.leito+')',
+                    origem:args.origem||args.setor,destino:args.setor,
+                    perfil:(args.perfil||'-')+(args.sexo?' ('+args.sexo+')':''),
+                    convenio:args.convenio||'-',acao:args.acao,
+                    dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString(),
+                    dataAdmissaoObj:statusDestino==='ocupado'?agora.toISOString():(dados.basePacientesCadastrados[args.pr]?.dataAdmissao||agora.toISOString())
+                });
+
+                const rev=Number(dados&&dados._meta&&dados._meta.revision||0)+1;
+                dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),safeguards:'multiuser-v5',editor:args.usuario||'usuario'};
+                tx.set(ref,JSON.parse(JSON.stringify(dados)));
+                tx.set(auditRef,JSON.parse(JSON.stringify({
+                    tipo:'entrada_leito_atomica',criadoEm:agora.toISOString(),
+                    setor:args.setor,leito:args.leito,prontuario:args.pr,paciente:args.nome,
+                    acao:args.acao,statusDestino:statusDestino,usuario:args.usuario||'usuario',revisao:rev
+                })));
+                return {ok:true,status:statusDestino,revisao:rev};
+            });
+            return JSON.parse(JSON.stringify(resultado));
+        };
+
+        // Saída hospitalar atômica e restrita ao leito selecionado.
         window.executarSaidaLeitoAtomica = async function(argsBrutos) {
             const args = JSON.parse(JSON.stringify(argsBrutos || {}));
             const agora = new Date();
