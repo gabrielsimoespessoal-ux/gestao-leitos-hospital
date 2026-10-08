@@ -25,6 +25,124 @@
         window.db = db;
         window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction };
 
+        // Ponte executada NO MESMO REALM do Firebase.
+        // Evita "custom Object object" em transações chamadas por scripts externos ao frame.
+        window.executarAdmissaoReservaAtomica = async function(argsBrutos) {
+            const args = JSON.parse(JSON.stringify(argsBrutos || {}));
+            const agora = new Date();
+            const ref = doc(db, 'hospital', 'dados');
+            const stamp = agora.toISOString().replace(/[:.]/g,'-');
+            const backupRef = doc(db, 'hospital', 'backup_admissao_' + stamp);
+            const auditRef = doc(db, 'hospital', 'auditoria_admissao_' + stamp);
+
+            const snapAntes = await getDoc(ref);
+            if (!snapAntes.exists()) throw new Error('Banco principal não encontrado.');
+            const remotoAntes = JSON.parse(JSON.stringify(snapAntes.data()));
+            const backupPlain = JSON.parse(JSON.stringify({
+                ...remotoAntes,
+                _backup_meta: {
+                    tipo: 'antes_admissao_reserva',
+                    criadoEm: agora.toISOString(),
+                    setor: args.setor,
+                    leito: args.leito,
+                    prontuario: args.pr
+                }
+            }));
+            await setDoc(backupRef, backupPlain);
+
+            const resultado = await runTransaction(db, async function(tx) {
+                const snap = await tx.get(ref);
+                if (!snap.exists()) throw new Error('Banco principal não encontrado.');
+
+                const dados = JSON.parse(JSON.stringify(snap.data()));
+                const setorRemoto = (dados.setoresData || []).find(function(x){ return x.nome === args.setor; });
+                const leitoRemoto = setorRemoto && (setorRemoto.leitos || []).find(function(x){ return String(x.n) === String(args.leito); });
+                if (!leitoRemoto) throw new Error('Leito não encontrado no banco.');
+
+                if (leitoRemoto.status === 'ocupado' && String(leitoRemoto.prontuario || '') === String(args.pr || '')) {
+                    return { jaAdmitido: true, revisao: Number(dados && dados._meta && dados._meta.revision || 0) };
+                }
+                if (!['reservado','disponivel'].includes(leitoRemoto.status)) {
+                    const e = new Error('O leito mudou de status em outro computador. Status atual: ' + leitoRemoto.status);
+                    e.code = 'CONFLITO_REAL';
+                    throw e;
+                }
+                if (leitoRemoto.status === 'reservado' && leitoRemoto.prontuario && String(leitoRemoto.prontuario) !== String(args.pr || '')) {
+                    const e = new Error('O leito está reservado para outro prontuário.');
+                    e.code = 'CONFLITO_REAL';
+                    throw e;
+                }
+
+                leitoRemoto.status = 'ocupado';
+                leitoRemoto.paciente = args.nome || '';
+                leitoRemoto.prontuario = args.pr || '';
+
+                dados.basePacientesCadastrados = dados.basePacientesCadastrados || {};
+                dados.basePacientesCadastrados[args.pr] = {
+                    ...(dados.basePacientesCadastrados[args.pr] || {}),
+                    nome: args.nome || '',
+                    nascimento: args.nasc || '',
+                    perfil: args.perfil || '',
+                    sexo: args.sexo || '',
+                    convenio: args.convenio || '',
+                    origem: args.origem || '',
+                    statusInternacao: 'ativo',
+                    dataAdmissao: agora.toISOString()
+                };
+                delete dados.basePacientesCadastrados[args.pr].motivoSaida;
+                delete dados.basePacientesCadastrados[args.pr].dataSaida;
+
+                dados.movimentacoesHistorico = Array.isArray(dados.movimentacoesHistorico) ? dados.movimentacoesHistorico : [];
+                const hora = agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+                const dataTxt = agora.toLocaleDateString('pt-BR') + ' ' + hora;
+                dados.movimentacoesHistorico.unshift({
+                    data: dataTxt,
+                    dataIso: agora.toISOString(),
+                    hora: hora,
+                    atendimentoNasc: 'Pront: ' + (args.pr || '-') + '<br><small>Nasc: ' + (args.nasc || '-') + '</small>',
+                    atendimento: args.pr || '-',
+                    nascimento: args.nasc || '',
+                    paciente: args.nome || '-',
+                    setor: args.setor + ' (Leito ' + args.leito + ')',
+                    origem: args.origem || args.setor,
+                    destino: args.setor,
+                    perfil: (args.perfil || '-') + (args.sexo ? ' (' + args.sexo + ')' : ''),
+                    convenio: args.convenio || '-',
+                    acao: 'Admissão',
+                    dataDesfecho: dataTxt,
+                    dataDesfechoObj: agora.toISOString(),
+                    dataAdmissaoObj: agora.toISOString()
+                });
+
+                const rev = Number(dados && dados._meta && dados._meta.revision || 0) + 1;
+                dados._meta = {
+                    ...(dados._meta || {}),
+                    revision: rev,
+                    previousRevision: rev - 1,
+                    updatedAt: agora.toISOString(),
+                    safeguards: 'multiuser-v3',
+                    editor: args.usuario || 'usuario'
+                };
+
+                tx.set(ref, JSON.parse(JSON.stringify(dados)));
+                tx.set(auditRef, JSON.parse(JSON.stringify({
+                    tipo: 'admissao_reserva_atomica',
+                    criadoEm: agora.toISOString(),
+                    setor: args.setor,
+                    leito: args.leito,
+                    prontuario: args.pr,
+                    paciente: args.nome,
+                    usuario: args.usuario || 'usuario',
+                    revisao: rev
+                })));
+
+                return { jaAdmitido: false, revisao: rev };
+            });
+
+            return JSON.parse(JSON.stringify(resultado));
+        };
+
+
         // Sincronização em tempo real ao carregar a página
         window.addEventListener('DOMContentLoaded', () => {
             carregarDadosDoFirebase();
