@@ -226,6 +226,46 @@
             return JSON.parse(JSON.stringify(resultado));
         };
 
+        // Recuperação adicional do estado anterior ao bug de liberação/alta em massa.
+        window.tentarRecuperarUltimoBackupSeguroV2 = async function() {
+            try{
+                const marcadorRef=doc(db,'hospital','recovery_saida_massa_v2_20261008');
+                const marcador=await getDoc(marcadorRef);
+                if(marcador.exists() && marcador.data() && marcador.data().done) return false;
+
+                const atualRef=doc(db,'hospital','dados');
+                const backupRef=doc(db,'hospital','ultimo_backup_seguro');
+                const [atualSnap,backupSnap]=await Promise.all([getDoc(atualRef),getDoc(backupRef)]);
+                if(!atualSnap.exists()||!backupSnap.exists()) return false;
+
+                const atual=JSON.parse(JSON.stringify(atualSnap.data()));
+                const backup=JSON.parse(JSON.stringify(backupSnap.data()));
+                const contar=function(d){
+                    let n=0;(d.setoresData||[]).forEach(function(s){(s.leitos||[]).forEach(function(l){if(l.status==='ocupado'||l.status==='reservado')n++;});});return n;
+                };
+                const na=contar(atual), nb=contar(backup);
+                const criado=Date.parse(backup._backup_meta&&backup._backup_meta.criadoEm||'');
+                const recente=Number.isFinite(criado) && (Date.now()-criado)<2*60*60*1000;
+
+                if(recente && nb>=na+3){
+                    const recuperado=JSON.parse(JSON.stringify(backup));
+                    delete recuperado._backup_meta;
+                    recuperado._meta={...(recuperado._meta||{}),updatedAt:new Date().toISOString(),recovery:'saida_massa_v2_20261008'};
+                    await setDoc(atualRef,recuperado);
+                    await setDoc(marcadorRef,{done:true,at:new Date().toISOString(),antes:na,depois:nb});
+                    alert('RECUPERAÇÃO DE SEGURANÇA CONCLUÍDA: o estado anterior à remoção em massa foi restaurado ('+na+' → '+nb+' vínculos ativos).');
+                    return true;
+                }
+
+                await setDoc(marcadorRef,{done:false,checkedAt:new Date().toISOString(),atual:na,backup:nb,recente:recente});
+                return false;
+            }catch(e){
+                console.error('Falha na recuperação segura V2:',e);
+                return false;
+            }
+        };
+        setTimeout(function(){ window.tentarRecuperarUltimoBackupSeguroV2(); },3500);
+
         // Recuperação única do estado imediatamente anterior ao bug de alta em massa.
         window.tentarRecuperarUltimoBackupSeguro = async function() {
             try{
