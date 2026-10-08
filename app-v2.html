@@ -2170,7 +2170,7 @@
             }
         }
 
-        function executarMovimentacaoLeito() {
+        async function executarMovimentacaoLeito() {
             if(usuarioAtual.perfil === 'Visitante') { alert('Acesso negado.'); return; }
 
             var setorNome = document.getElementById('mov-setor').value;
@@ -2185,6 +2185,76 @@
             var precaucao = document.getElementById('mov-precaucao').value;
             var previsaoAltaPaciente = document.getElementById('mov-previsao-alta-paciente') ? document.getElementById('mov-previsao-alta-paciente').value : '';
             var acao = document.getElementById('mov-acao').value;
+
+            // FLUXO SEGURO NATIVO PARA ADMISSÃO E RESERVA.
+            // Confirma no Firebase antes de alterar a interface local.
+            if (acao === 'Admissão' || acao === 'Reservado') {
+                if(!atendimento || !paciente || !nascimento || !perfilVaga || !sexo || !origem) {
+                    alert('Atenção: Preencha todos os campos obrigatórios do paciente.');
+                    return;
+                }
+                if (typeof window.executarEntradaLeitoAtomica !== 'function') {
+                    alert('Módulo seguro de admissão ainda não carregou. Atualize a página e tente novamente.');
+                    return;
+                }
+                try {
+                    var resultadoSeguro = await window.executarEntradaLeitoAtomica({
+                        acao: acao,
+                        setor: setorNome,
+                        leito: leitoNum,
+                        pr: atendimento,
+                        nome: paciente,
+                        nasc: nascimento,
+                        sexo: sexo,
+                        perfil: perfilVaga,
+                        convenio: convenio,
+                        precaucao: precaucao,
+                        origem: origem,
+                        previsaoAlta: previsaoAltaPaciente,
+                        usuario: (usuarioAtual && usuarioAtual.nome) ? usuarioAtual.nome : 'usuario'
+                    });
+
+                    var setorSeguro = setoresData.find(function(s){ return s.nome === setorNome; });
+                    var leitoSeguro = setorSeguro && setorSeguro.leitos.find(function(l){ return String(l.n) === String(leitoNum); });
+                    if (leitoSeguro) {
+                        leitoSeguro.status = resultadoSeguro.status;
+                        leitoSeguro.paciente = paciente;
+                        leitoSeguro.prontuario = atendimento;
+                    }
+                    basePacientesCadastrados[atendimento] = {
+                        ...(basePacientesCadastrados[atendimento] || {}),
+                        nome: paciente,
+                        nascimento: nascimento,
+                        sexo: sexo,
+                        perfil: perfilVaga,
+                        convenio: convenio,
+                        origem: origem,
+                        precaucao: precaucao,
+                        previsaoAlta: previsaoAltaPaciente || '',
+                        statusInternacao: resultadoSeguro.status === 'ocupado' ? 'ativo' : 'reservado',
+                        dataAdmissao: resultadoSeguro.status === 'ocupado' ? new Date().toISOString() : ((basePacientesCadastrados[atendimento]||{}).dataAdmissao || '')
+                    };
+
+                    renderizarPainelLeitos();
+                    atualizarTabelaPacientesInternos();
+
+                    document.getElementById('mov-atendimento').value = '';
+                    document.getElementById('mov-paciente').value = '';
+                    document.getElementById('mov-nascimento').value = '';
+                    if(document.getElementById('mov-previsao-alta-paciente')) document.getElementById('mov-previsao-alta-paciente').value = '';
+                    document.getElementById('mov-acao').selectedIndex = 0;
+
+                    alert((acao === 'Admissão' ? 'Admissão' : 'Reserva') + ' gravada com sucesso no banco. A alteração está persistida.');
+                } catch (err) {
+                    console.error('Erro no fluxo seguro nativo de entrada:', err);
+                    if (err && err.code === 'CONFLITO_REAL') {
+                        alert('CONFLITO REAL DETECTADO.\n\n' + err.message + '\n\nNenhum dado foi sobrescrito. Atualize a página e confira o leito.');
+                    } else {
+                        alert('Não foi possível gravar a movimentação no banco: ' + (err && err.message ? err.message : err));
+                    }
+                }
+                return;
+            }
 
             var medicoCirurgiao = '-';
             var dataHoraCirurgia = '-';
