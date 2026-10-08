@@ -424,6 +424,9 @@
               '<div style="display:grid;grid-template-columns:1fr;gap:10px">'+
                 '<button class="btn btn-success" id="atalho-cadastrar-v16" style="justify-content:center">➕ Cadastrar paciente neste leito</button>'+
                 '<button class="btn" id="atalho-reservar-v16" style="justify-content:center;background:#2563eb">📌 Fazer reserva neste leito</button>'+
+                '<button class="btn" id="atalho-bloquear-v16" style="justify-content:center;background:#7c3aed">🔒 Bloquear leito</button>'+
+                '<button class="btn" id="atalho-higienizar-v16" style="justify-content:center;background:#f59e0b;color:#fff">🧹 Aguardar higienização</button>'+
+                '<button class="btn" id="atalho-liberar-v16" style="justify-content:center;background:#059669">✅ Liberar leito</button>'+
                 '<button class="btn" id="atalho-historico-v16" style="justify-content:center;background:#64748b">🕘 Abrir histórico / gestão do leito</button>'+
                 '<button class="btn" id="atalho-cancel-v16" style="justify-content:center;background:#e2e8f0;color:#334155">Cancelar</button>'+
               '</div>'+
@@ -460,6 +463,39 @@
 
           d.getElementById('atalho-cadastrar-v16').onclick=()=>abrirFormulario('Admissão');
           d.getElementById('atalho-reservar-v16').onclick=()=>abrirFormulario('Reservado');
+
+          const aplicarStatusLeito=async(statusDestino,rotulo)=>{
+            if(typeof w.executarStatusLeitoAtomico!=='function'){
+              w.alert('Módulo seguro de gestão de leito ainda não carregou. Faça Ctrl + F5 e tente novamente.');
+              return;
+            }
+            if(!w.confirm(rotulo+' o leito '+leito+' de '+setor+'?'))return;
+            try{
+              const resultado=await w.executarStatusLeitoAtomico({
+                setor:setor,leito:leito,statusDestino:statusDestino,
+                usuario:w.usuarioAtual?.nome||'usuario'
+              });
+              l.status=resultado.status;l.paciente='';l.prontuario='';
+              modal.style.display='none';
+              if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+              if(typeof w.atualizarTabelaMovimentacoes==='function')w.atualizarTabelaMovimentacoes();
+              if(typeof w.atualizarTabelaHistoricoGeral==='function')w.atualizarTabelaHistoricoGeral();
+              w.alert('Leito '+leito+' atualizado com sucesso para '+rotulo.toUpperCase()+'.');
+            }catch(err){
+              console.error('Erro ao alterar status do leito:',err);
+              w.alert(err?.code==='LEITO_EM_USO'
+                ? 'Este leito está em uso e não pode ser alterado por este atalho.'
+                : 'Não foi possível alterar o status do leito: '+(err?.message||err));
+            }
+          };
+
+          const btnBloq=d.getElementById('atalho-bloquear-v16');
+          const btnHig=d.getElementById('atalho-higienizar-v16');
+          const btnLib=d.getElementById('atalho-liberar-v16');
+          if(btnBloq){btnBloq.style.display=l.status==='bloqueado'?'none':'block';btnBloq.onclick=()=>aplicarStatusLeito('bloqueado','Bloquear');}
+          if(btnHig){btnHig.style.display=l.status==='higienizacao'?'none':'block';btnHig.onclick=()=>aplicarStatusLeito('higienizacao','Aguardar higienização');}
+          if(btnLib){btnLib.style.display=(l.status==='bloqueado'||l.status==='higienizacao')?'block':'none';btnLib.onclick=()=>aplicarStatusLeito('disponivel','Liberar');}
+
           d.getElementById('atalho-historico-v16').onclick=()=>{modal.style.display='none';oldBedOpen.call(w,setor,leito);};
           d.getElementById('atalho-cancel-v16').onclick=()=>modal.style.display='none';
           modal.style.display='flex';
