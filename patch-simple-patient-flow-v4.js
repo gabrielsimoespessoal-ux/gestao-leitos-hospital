@@ -1717,6 +1717,47 @@
           return r;
         };
 
+        function aplicarBadgeClinicaMedicaV15(){
+          const boxes=[...d.querySelectorAll('#painel-setores-detalhado .sector-box')];
+          boxes.forEach((box,i)=>{
+            const s=w.setoresData?.[i]; if(!s)return;
+            const pills=[...box.querySelectorAll('.leito-pill')];
+            pills.forEach((pill,j)=>{
+              const l=s.leitos?.[j]; if(!l)return;
+              pill.querySelectorAll('.badge-clinica-medica-v15').forEach(x=>x.remove());
+              if(l.status!=='ocupado'||!l.prontuario)return;
+
+              const b=w.basePacientesCadastrados?.[l.prontuario]||{};
+              const perfil=String(b.perfil||b.especialidade||'').trim().toLowerCase();
+              const ehClinica=perfil.includes('enfermaria clínica')||perfil.includes('enfermaria clinica');
+              if(!ehClinica)return;
+
+              pill.style.position='relative';
+              pill.style.overflow='visible';
+
+              const badge=d.createElement('span');
+              badge.className='badge-clinica-medica-v15';
+              badge.textContent='C.M';
+              badge.title='Enfermaria Clínica / Clínica Médica';
+              badge.style.cssText=
+                'position:absolute;left:-7px;bottom:-9px;'+
+                'background:#0f766e;color:#fff;border:2px solid #fff;border-radius:999px;'+
+                'min-width:22px;height:16px;padding:0 4px;display:flex;align-items:center;justify-content:center;'+
+                'font-size:8px;font-weight:900;letter-spacing:.2px;z-index:8;'+
+                'box-shadow:0 1px 3px rgba(0,0,0,.28);pointer-events:none;white-space:nowrap';
+              pill.appendChild(badge);
+            });
+          });
+        }
+
+        const renderAntesClinicaMedicaV15=w.renderizarPainelLeitos;
+        w.renderizarPainelLeitos=function(){
+          const r=renderAntesClinicaMedicaV15.apply(w,arguments);
+          setTimeout(aplicarBadgeClinicaMedicaV15,90);
+          return r;
+        };
+        setTimeout(aplicarBadgeClinicaMedicaV15,1300);
+
         garantirCampoPrevisaoAltaV14();
         setTimeout(garantirCampoPrevisaoAltaV14,1000);
         setTimeout(()=>{if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();},1200);
