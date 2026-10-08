@@ -1931,6 +1931,9 @@
             });
         }
 
+        var movAcaoFiltroLeitos = document.getElementById('mov-acao');
+        if(movAcaoFiltroLeitos) movAcaoFiltroLeitos.addEventListener('change', atualizarSelectLeitosMov);
+
         function alternarCamposCirurgicosMov() {
             var acao = document.getElementById('mov-acao').value;
             var blocoCirurgico = document.getElementById('bloco-campos-cirurgicos');
@@ -2309,12 +2312,24 @@
             var setorNome = document.getElementById('mov-setor').value;
             var setorObj = setoresData.find(function(s) { return s.nome === setorNome; });
             var selectLeito = document.getElementById('mov-leito');
+            var acao = document.getElementById('mov-acao') ? document.getElementById('mov-acao').value : '';
             if(!selectLeito) return;
+            var valorAtual = selectLeito.value;
             selectLeito.innerHTML = '';
             if(setorObj) {
-                setorObj.leitos.forEach(function(l) {
-                    selectLeito.innerHTML += '<option value="' + l.n + '">Leito ' + l.n + ' (' + l.status + ')</option>';
+                var acoesAlocacao = ['Admissão','Transferência Interna','Reservado','Reserva Cirúrgica Eletiva'];
+                var somenteDisponiveis = acoesAlocacao.includes(acao) || String(acao||'').includes('Reserva');
+                var leitos = setorObj.leitos.filter(function(l) {
+                    return somenteDisponiveis ? l.status === 'disponivel' : true;
                 });
+                if(!leitos.length) {
+                    selectLeito.innerHTML = '<option value="">Nenhum leito disponível</option>';
+                    return;
+                }
+                leitos.forEach(function(l) {
+                    selectLeito.innerHTML += '<option value="' + l.n + '">Leito ' + l.n + (somenteDisponiveis ? ' (disponível)' : ' (' + l.status + ')') + '</option>';
+                });
+                if(leitos.some(function(l){ return String(l.n)===String(valorAtual); })) selectLeito.value=valorAtual;
             }
         }
 
