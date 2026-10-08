@@ -618,7 +618,7 @@
             if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
             if(typeof w.atualizarSelectsGerais==='function')w.atualizarSelectsGerais();
             if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
-            if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
+            console.info('Estrutura complementar carregada apenas em memória; nenhum salvamento automático no carregamento.');
           }else{
             if(typeof w.atualizarSelectsGerais==='function')w.atualizarSelectsGerais();
           }
@@ -1641,8 +1641,8 @@
         }
 
         // Executa após o carregamento/sincronização inicial do Firebase.
-        setTimeout(recuperarAdmissoesUtiSusV15,1800);
-        setTimeout(recuperarAdmissoesUtiSusV15,4200);
+        // Recuperação automática desativada para impedir qualquer sobrescrita durante o carregamento.
+        w.recuperarAdmissoesUtiSusV15 = recuperarAdmissoesUtiSusV15;
 
         // contraste visual do perfil incompatível em mudança manual de setor
         const perfilEl=d.getElementById('mov-perfil-vaga'),setorEl=d.getElementById('mov-setor');
