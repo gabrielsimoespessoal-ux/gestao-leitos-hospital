@@ -8,7 +8,7 @@
     <!-- Firebase SDK (Modular CDN) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDU2o6d_p_gyEheKS_tt1SJlwsKL5wTQgM",
@@ -23,7 +23,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         window.db = db;
-        window.firebaseModules = { doc, setDoc, getDoc, onSnapshot };
+        window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction };
 
         // Sincronização em tempo real ao carregar a página
         window.addEventListener('DOMContentLoaded', () => {
@@ -994,7 +994,25 @@
         }
 
         var firebaseRevisionLocal = 0;
+        var firebaseBaseSnapshotLocal = {};
         var ultimaGravacaoSeguraEm = null;
+        var multiusuarioStatus = 'sincronizado';
+
+        function normalizarFirebaseSeguro(valor) {
+            return JSON.parse(JSON.stringify(valor, function(chave, v) {
+                if (v === undefined || typeof v === 'function') return undefined;
+                if (v instanceof Date) return isNaN(v.getTime()) ? null : v.toISOString();
+                if (v && typeof v === 'object' && typeof v.toDate === 'function') {
+                    try { return v.toDate().toISOString(); } catch (e) { return null; }
+                }
+                if (typeof v === 'number' && !isFinite(v)) return null;
+                return v;
+            }));
+        }
+
+        function iguaisSeguro(a,b) {
+            return JSON.stringify(normalizarFirebaseSeguro(a)) === JSON.stringify(normalizarFirebaseSeguro(b));
+        }
 
         function contarEstadoProtegido(payload) {
             var setores = Array.isArray(payload && payload.setoresData) ? payload.setoresData : [];
@@ -1033,87 +1051,192 @@
             return null;
         }
 
-        async function criarBackupSegurancaFirebase(dadosAtuais, motivo) {
-            const { doc, setDoc } = window.firebaseModules;
-            var stamp = new Date().toISOString().replace(/[:.]/g,'-');
-            var backup = JSON.parse(JSON.stringify({
-                ...dadosAtuais,
-                _backup_meta: {
-                    criadoEm: new Date().toISOString(),
-                    motivo: motivo || 'antes_de_gravacao',
-                    revisao: Number(dadosAtuais && dadosAtuais._meta && dadosAtuais._meta.revision || 0)
+        function chaveEventoMulti(m) {
+            return [
+                String(m && m.atendimento || ''),
+                String(m && (m.dataIso || m.data || '') || ''),
+                String(m && m.acao || ''),
+                String(m && m.setor || ''),
+                String(m && m.paciente || '')
+            ].join('||');
+        }
+
+        function mergeHistoricoMulti(remoto, local) {
+            var mapa = new Map();
+            (Array.isArray(remoto)?remoto:[]).forEach(function(x){ mapa.set(chaveEventoMulti(x), normalizarFirebaseSeguro(x)); });
+            (Array.isArray(local)?local:[]).forEach(function(x){ mapa.set(chaveEventoMulti(x), normalizarFirebaseSeguro(x)); });
+            return Array.from(mapa.values()).sort(function(a,b){
+                return String(b.dataIso || b.data || '').localeCompare(String(a.dataIso || a.data || ''));
+            });
+        }
+
+        function chaveTransferenciaMulti(x) {
+            return [
+                String(x && x.atendimento || ''),
+                String(x && (x.dataIso || x.data || '') || ''),
+                String(x && x.paciente || ''),
+                String(x && x.destino || '')
+            ].join('||');
+        }
+
+        function mergeArrayEditavelMulti(baseArr, localArr, remotoArr, nomeColecao) {
+            var baseMap=new Map((Array.isArray(baseArr)?baseArr:[]).map(function(x){return [chaveTransferenciaMulti(x),normalizarFirebaseSeguro(x)];}));
+            var localMap=new Map((Array.isArray(localArr)?localArr:[]).map(function(x){return [chaveTransferenciaMulti(x),normalizarFirebaseSeguro(x)];}));
+            var remoteMap=new Map((Array.isArray(remotoArr)?remotoArr:[]).map(function(x){return [chaveTransferenciaMulti(x),normalizarFirebaseSeguro(x)];}));
+            var chaves=new Set([].concat(Array.from(baseMap.keys()),Array.from(localMap.keys())));
+            chaves.forEach(function(k){
+                var b=baseMap.get(k), l=localMap.get(k), r=remoteMap.get(k);
+                if(iguaisSeguro(b,l)) return;
+                if(!iguaisSeguro(b,r) && !iguaisSeguro(l,r)) {
+                    var e=new Error('CONFLITO_MULTIUSUARIO: '+nomeColecao+' foi alterada por outro computador.');
+                    e.code='CONFLITO_MULTIUSUARIO'; throw e;
                 }
-            }));
-            await setDoc(doc(window.db, 'hospital', 'backup_' + stamp), backup);
-            await setDoc(doc(window.db, 'hospital', 'ultimo_backup_seguro'), backup);
-            return true;
+                if(l===undefined) remoteMap.delete(k); else remoteMap.set(k,l);
+            });
+            return Array.from(remoteMap.values());
+        }
+
+        function mergeSetoresMulti(baseSetores, localSetores, remotoSetores) {
+            var resultado = normalizarFirebaseSeguro(Array.isArray(remotoSetores)?remotoSetores:[]);
+            function getSet(arr,nome){return (arr||[]).find(function(s){return String(s.nome||'')===String(nome||'');});}
+            function getBed(setor,n){return setor && (setor.leitos||[]).find(function(l){return String(l.n||'')===String(n||'');});}
+
+            (Array.isArray(localSetores)?localSetores:[]).forEach(function(ls){
+                var bs=getSet(baseSetores,ls.nome);
+                var rs=getSet(resultado,ls.nome);
+                if(!rs) {
+                    if(!bs) resultado.push(normalizarFirebaseSeguro(ls));
+                    return;
+                }
+
+                // Metadados do setor, sem substituir a lista inteira de leitos.
+                Object.keys(ls).filter(function(k){return k!=='leitos';}).forEach(function(k){
+                    var bv=bs?bs[k]:undefined, lv=ls[k], rv=rs[k];
+                    if(iguaisSeguro(bv,lv)) return;
+                    if(!iguaisSeguro(bv,rv) && !iguaisSeguro(lv,rv)) {
+                        var e=new Error('CONFLITO_MULTIUSUARIO: setor '+ls.nome+' foi alterado em outro computador.');
+                        e.code='CONFLITO_MULTIUSUARIO'; throw e;
+                    }
+                    rs[k]=normalizarFirebaseSeguro(lv);
+                });
+
+                (ls.leitos||[]).forEach(function(ll){
+                    var bl=getBed(bs,ll.n), rl=getBed(rs,ll.n);
+                    if(!rl) {
+                        if(!bl) (rs.leitos||(rs.leitos=[])).push(normalizarFirebaseSeguro(ll));
+                        return;
+                    }
+                    if(iguaisSeguro(bl,ll)) return;
+                    if(!iguaisSeguro(bl,rl) && !iguaisSeguro(ll,rl)) {
+                        var e=new Error('CONFLITO_LEITO: '+ls.nome+' / leito '+ll.n+' foi alterado simultaneamente por outro computador.');
+                        e.code='CONFLITO_LEITO'; throw e;
+                    }
+                    Object.assign(rl,normalizarFirebaseSeguro(ll));
+                });
+            });
+            return resultado;
+        }
+
+        function mergePacientesMulti(baseObj, localObj, remotoObj) {
+            var result=normalizarFirebaseSeguro(remotoObj||{});
+            var base=baseObj||{}, local=localObj||{};
+            var keys=new Set(Object.keys(base).concat(Object.keys(local)));
+            keys.forEach(function(k){
+                var b=base[k], l=local[k], r=result[k];
+                if(iguaisSeguro(b,l)) return;
+                if(!iguaisSeguro(b,r) && !iguaisSeguro(l,r)) {
+                    var e=new Error('CONFLITO_PACIENTE: o prontuário '+k+' foi alterado simultaneamente em outro computador.');
+                    e.code='CONFLITO_PACIENTE'; throw e;
+                }
+                if(l===undefined) delete result[k]; else result[k]=normalizarFirebaseSeguro(l);
+            });
+            return result;
         }
 
         async function salvarDadosNoFirebase(silencioso) {
             if (!window.db) return false;
+            multiusuarioStatus='salvando';
             try {
-                const { doc, getDoc, setDoc } = window.firebaseModules;
+                const { doc, runTransaction } = window.firebaseModules;
                 var ref = doc(window.db, "hospital", "dados");
-                var snapAtual = await getDoc(ref);
-                var remoto = snapAtual.exists() ? snapAtual.data() : {};
+                var stamp = new Date().toISOString().replace(/[:.]/g,'-');
+                var backupRef = doc(window.db, 'hospital', 'backup_' + stamp);
+                var ultimoBackupRef = doc(window.db, 'hospital', 'ultimo_backup_seguro');
+                var auditoriaRef = doc(window.db, 'hospital', 'auditoria_' + stamp);
 
-                var revisaoRemota = Number(remoto && remoto._meta && remoto._meta.revision || 0);
-                if(firebaseRevisionLocal && revisaoRemota && revisaoRemota !== firebaseRevisionLocal) {
-                    if(!silencioso) {
-                        alert('PROTEÇÃO DE CONCORRÊNCIA: os dados foram alterados em outro computador desde que esta tela foi carregada. Atualize a página antes de tentar novamente para evitar sobrescrever trabalho da equipe.');
-                    }
-                    return false;
-                }
-
-                var payloadBruto = {
+                var base = normalizarFirebaseSeguro(firebaseBaseSnapshotLocal || {});
+                var local = normalizarFirebaseSeguro({
                     setoresData: setoresData,
                     movimentacoesHistorico: movimentacoesHistorico,
                     transferenciasAtivas: transferenciasAtivas,
                     transferenciasFinalizadas: transferenciasFinalizadas,
                     basePacientesCadastrados: basePacientesCadastrados
-                };
+                });
 
-                var payload = JSON.parse(JSON.stringify(payloadBruto, function(chave, valor) {
-                    if (valor === undefined || typeof valor === 'function') return undefined;
-                    if (valor instanceof Date) return isNaN(valor.getTime()) ? null : valor.toISOString();
-                    if (valor && typeof valor === 'object' && typeof valor.toDate === 'function') {
-                        try { return valor.toDate().toISOString(); } catch (e) { return null; }
+                var novaRevisao = await runTransaction(window.db, async function(tx) {
+                    var snap = await tx.get(ref);
+                    var remoto = snap.exists() ? normalizarFirebaseSeguro(snap.data()) : {};
+
+                    var merged = normalizarFirebaseSeguro(remoto);
+                    merged.setoresData = mergeSetoresMulti(base.setoresData||[], local.setoresData||[], remoto.setoresData||[]);
+                    merged.basePacientesCadastrados = mergePacientesMulti(base.basePacientesCadastrados||{}, local.basePacientesCadastrados||{}, remoto.basePacientesCadastrados||{});
+                    merged.movimentacoesHistorico = mergeHistoricoMulti(remoto.movimentacoesHistorico||[], local.movimentacoesHistorico||[]);
+                    merged.transferenciasAtivas = mergeArrayEditavelMulti(base.transferenciasAtivas||[], local.transferenciasAtivas||[], remoto.transferenciasAtivas||[], 'transferências ativas');
+                    merged.transferenciasFinalizadas = mergeArrayEditavelMulti(base.transferenciasFinalizadas||[], local.transferenciasFinalizadas||[], remoto.transferenciasFinalizadas||[], 'transferências finalizadas');
+
+                    var suspeita = perdaSuspeitaProtegida(contarEstadoProtegido(remoto), contarEstadoProtegido(merged));
+                    if(suspeita && window.__permitirGravacaoEmMassaUmaVez !== true) {
+                        var e=new Error('GRAVACAO_MASSA_BLOQUEADA: '+suspeita);
+                        e.code='GRAVACAO_MASSA_BLOQUEADA'; throw e;
                     }
-                    if (typeof valor === 'number' && !isFinite(valor)) return null;
-                    return valor;
-                }));
 
-                var atualResumo = contarEstadoProtegido(remoto);
-                var novoResumo = contarEstadoProtegido(payload);
-                var suspeita = perdaSuspeitaProtegida(atualResumo, novoResumo);
+                    var rev=Number(remoto && remoto._meta && remoto._meta.revision || 0)+1;
+                    merged._meta={
+                        revision:rev,
+                        updatedAt:new Date().toISOString(),
+                        previousRevision:rev-1,
+                        safeguards:'multiuser-v2',
+                        editor:(usuarioAtual && usuarioAtual.nome) ? usuarioAtual.nome : 'usuario'
+                    };
 
-                if(suspeita && window.__permitirGravacaoEmMassaUmaVez !== true) {
-                    console.error('Gravação bloqueada pela proteção anti-perda:', suspeita, atualResumo, novoResumo);
-                    if(!silencioso) {
-                        alert('GRAVAÇÃO BLOQUEADA POR SEGURANÇA.\n\n' + suspeita + '\n\nNenhum dado foi sobrescrito. Para alterações em massa, use o fluxo administrativo com backup explícito.');
-                    }
-                    return false;
-                }
-                window.__permitirGravacaoEmMassaUmaVez = false;
+                    var backup=normalizarFirebaseSeguro({
+                        ...remoto,
+                        _backup_meta:{
+                            criadoEm:new Date().toISOString(),
+                            motivo:'antes_de_gravacao_multiusuario',
+                            revisao:Number(remoto && remoto._meta && remoto._meta.revision || 0)
+                        }
+                    });
 
-                await criarBackupSegurancaFirebase(remoto, 'antes_de_gravacao');
+                    tx.set(backupRef,backup);
+                    tx.set(ultimoBackupRef,backup);
+                    tx.set(ref,merged);
+                    tx.set(auditoriaRef,{
+                        tipo:'gravacao_multiusuario',
+                        criadoEm:new Date().toISOString(),
+                        revisaoAnterior:Number(remoto && remoto._meta && remoto._meta.revision || 0),
+                        revisaoNova:rev,
+                        usuario:(usuarioAtual && usuarioAtual.nome) ? usuarioAtual.nome : 'usuario'
+                    });
+                    return rev;
+                });
 
-                var novaRevisao = revisaoRemota + 1;
-                payload._meta = {
-                    revision: novaRevisao,
-                    updatedAt: new Date().toISOString(),
-                    previousRevision: revisaoRemota,
-                    safeguards: 'v1'
-                };
-
-                await setDoc(ref, payload);
-                firebaseRevisionLocal = novaRevisao;
-                ultimaGravacaoSeguraEm = payload._meta.updatedAt;
+                window.__permitirGravacaoEmMassaUmaVez=false;
+                firebaseRevisionLocal=novaRevisao;
+                ultimaGravacaoSeguraEm=new Date().toISOString();
+                multiusuarioStatus='sincronizado';
                 return true;
-            } catch (e) {
-                console.error("Erro ao salvar no Firebase: ", e);
-                if (!silencioso) {
-                    alert("Não foi possível salvar a alteração com segurança. Nenhuma gravação deve ser considerada concluída. Detalhe: " + (e && e.message ? e.message : e));
+            } catch(e) {
+                multiusuarioStatus='conflito';
+                console.error('Erro de gravação multiusuário:',e);
+                if(!silencioso) {
+                    if(e && (e.code==='CONFLITO_LEITO'||e.code==='CONFLITO_PACIENTE'||e.code==='CONFLITO_MULTIUSUARIO')) {
+                        alert('CONFLITO EVITADO.\n\nOutro computador alterou o mesmo registro enquanto você trabalhava. Nenhum dado foi sobrescrito. Atualize a página, confira o registro mais recente e tente novamente.');
+                    } else if(e && e.code==='GRAVACAO_MASSA_BLOQUEADA') {
+                        alert('GRAVAÇÃO EM MASSA BLOQUEADA POR SEGURANÇA.\n\n'+String(e.message||'').replace('GRAVACAO_MASSA_BLOQUEADA: ','')+'\n\nNenhum dado foi apagado.');
+                    } else {
+                        alert('Não foi possível salvar com segurança. Nenhum dado deve ser considerado concluído. Detalhe: '+(e&&e.message?e.message:e));
+                    }
                 }
                 return false;
             }
@@ -1131,7 +1254,9 @@
             onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
+                    firebaseBaseSnapshotLocal = normalizarFirebaseSeguro(data);
                     firebaseRevisionLocal = Number(data && data._meta && data._meta.revision || 0);
+                    multiusuarioStatus = 'sincronizado';
                     if (data.setoresData) setoresData = data.setoresData;
                     if (data.movimentacoesHistorico) {
                         movimentacoesHistorico = data.movimentacoesHistorico.map(m => ({
