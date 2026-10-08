@@ -102,32 +102,82 @@
 
         // --- validação de perfil/setor + Reserva Externa sem prontuário ---
         const oldExec=w.executarMovimentacaoLeito;
-        w.executarMovimentacaoLeito=function(){
+        w.executarMovimentacaoLeito=async function(){
           const ac=d.getElementById('mov-acao')?.value;
           if(!ac){w.alert('Selecione primeiro a Ação Operacional.');return;}
+
           const setor=d.getElementById('mov-setor')?.value;
+          const leito=d.getElementById('mov-leito')?.value;
           const perfil=d.getElementById('mov-perfil-vaga')?.value;
           if(!perfilCompativel(setor,perfil)){w.alert(msgConflito(setor,perfil));return;}
-          const pr=d.getElementById('mov-atendimento');
+
+          const prEl=d.getElementById('mov-atendimento');
           let gerado=false;
           const ehReserva=['Reservado','Reserva Cirúrgica Eletiva','Reserva Cirúrgica com Previsão de Alta'].includes(ac);
-          if(ehReserva&&!pr.value.trim()){pr.value='RES-'+Date.now();gerado=true;}
-          if(!ehReserva&&!pr.value.trim()){w.alert('Informe o número do prontuário. Ele é opcional apenas durante uma reserva e obrigatório para efetivar a ocupação do leito.');return;}
-          const chave=pr.value.trim();
-          const pac=d.getElementById('mov-paciente')?.value.trim();
+          if(ehReserva&&!prEl.value.trim()){prEl.value='RES-'+Date.now();gerado=true;}
+          if(!ehReserva&&!prEl.value.trim()){
+            w.alert('Informe o número do prontuário. Ele é opcional apenas durante uma reserva e obrigatório para efetivar a ocupação do leito.');
+            return;
+          }
+
+          const pr=prEl.value.trim();
+          const nome=d.getElementById('mov-paciente')?.value.trim();
           const nasc=d.getElementById('mov-nascimento')?.value;
           const sexo=d.getElementById('mov-sexo')?.value;
           const conv=d.getElementById('mov-convenio')?.value;
           const prec=d.getElementById('mov-precaucao')?.value;
           const origem=d.getElementById('mov-origem')?.value;
-          const r=oldExec.apply(w,arguments);
-          setTimeout(()=>{
-            if(w.basePacientesCadastrados[chave]){
-              Object.assign(w.basePacientesCadastrados[chave],{nome:pac,nascimento:nasc,sexo,perfil,convenio:conv,precaucao:prec,origem,reservaExterna:ac==='Reservado',tipoReserva:ehReserva?ac:'',prontuarioPendente:gerado});
-              if(typeof w.salvarDadosNoFirebase==='function')w.salvarDadosNoFirebase();
+          const previsao=d.getElementById('mov-previsao-alta-paciente')?.value||'';
+
+          if(['Admissão','Reservado'].includes(ac)){
+            if(!nome||!nasc||!perfil||!sexo||!origem){
+              w.alert('Atenção: preencha todos os campos obrigatórios do paciente.');
+              return;
             }
-          },0);
-          return r;
+            if(typeof w.executarEntradaLeitoAtomica!=='function'){
+              w.alert('Módulo seguro de admissão ainda não carregou. Faça Ctrl + F5 e tente novamente.');
+              return;
+            }
+
+            try{
+              const resultado=await w.executarEntradaLeitoAtomica({
+                acao:ac,setor:setor,leito:leito,pr:pr,nome:nome,nasc:nasc,
+                sexo:sexo,perfil:perfil,convenio:conv,precaucao:prec,origem:origem,
+                previsaoAlta:previsao,usuario:w.usuarioAtual?.nome||'usuario'
+              });
+
+              // Atualiza somente a representação local correspondente ao commit confirmado.
+              const sObj=w.setoresData.find(x=>x.nome===setor);
+              const lObj=sObj?.leitos.find(x=>String(x.n)===String(leito));
+              if(lObj){lObj.status=resultado.status;lObj.paciente=nome;lObj.prontuario=pr;}
+              w.basePacientesCadastrados[pr]={
+                ...(w.basePacientesCadastrados[pr]||{}),
+                nome,nascimento:nasc,sexo,perfil,convenio:conv,precaucao:prec,origem,
+                previsaoAlta:previsao,statusInternacao:resultado.status==='ocupado'?'ativo':'reservado',
+                prontuarioPendente:gerado
+              };
+
+              if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
+              if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
+
+              ['mov-atendimento','mov-paciente','mov-nascimento'].forEach(id=>{const el=d.getElementById(id);if(el)el.value='';});
+              if(d.getElementById('mov-previsao-alta-paciente'))d.getElementById('mov-previsao-alta-paciente').value='';
+              const acEl=d.getElementById('mov-acao');if(acEl)acEl.selectedIndex=0;
+
+              w.alert((ac==='Admissão'?'Admissão':'Reserva')+' gravada com sucesso no banco. A alteração permanecerá após atualizar a página.');
+            }catch(err){
+              console.error('Falha na entrada atômica:',err);
+              if(err?.code==='CONFLITO_REAL'){
+                w.alert('CONFLITO REAL DETECTADO.\n\n'+err.message+'\n\nNenhum dado foi sobrescrito. Atualize a página e confira o leito.');
+              }else{
+                w.alert('Não foi possível gravar a movimentação no banco: '+(err?.message||err));
+              }
+            }
+            return;
+          }
+
+          // Demais ações continuam no fluxo existente até migração individual.
+          return oldExec.apply(w,arguments);
         };
 
         // --- modal de edição completo, incluindo prontuário posterior ---
