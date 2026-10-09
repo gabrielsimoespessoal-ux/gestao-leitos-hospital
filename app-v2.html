@@ -1735,9 +1735,9 @@
                 var base = normalizarFirebaseSeguro(firebaseBaseSnapshotLocal || {});
                 // As rotas legadas também precisam de decisão explícita sobre indicadores.
                 // A pergunta é aplicada somente a novos eventos, jamais aos históricos existentes.
-                var eventosAntigos = new Set((base.movimentacoesHistorico||[]).map(chaveHistoricoMulti));
+                var eventosAntigos = new Set((base.movimentacoesHistorico||[]).map(chaveEventoMulti));
                 (movimentacoesHistorico||[]).forEach(function(m){
-                    if(eventosAntigos.has(chaveHistoricoMulti(m))) return;
+                    if(eventosAntigos.has(chaveEventoMulti(m))) return;
                     if(typeof m.contabilizarIndicadores==='boolean') return;
                     var a=String(m.acao||'');
                     if(/admiss|alta|óbito|obito|transfer|evas|reserv/i.test(a)){
