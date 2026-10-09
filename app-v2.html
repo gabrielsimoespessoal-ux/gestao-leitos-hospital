@@ -108,6 +108,7 @@
                     destino: args.setor,
                     perfil: (args.perfil || '-') + (args.sexo ? ' (' + args.sexo + ')' : ''),
                     convenio: args.convenio || '-',
+                    contabilizarIndicadores:args.contabilizarIndicadores!==false,
                     acao: 'Admissão',
                     dataDesfecho: dataTxt,
                     dataDesfechoObj: agora.toISOString(),
@@ -237,7 +238,7 @@
                     setor:args.setor+' (Leito '+args.leito+')',
                     origem:args.origem||args.setor,destino:args.setor,
                     perfil:(args.perfil||'-')+(args.sexo?' ('+args.sexo+')':''),
-                    convenio:args.convenio||'-',acao:args.acao,
+                    convenio:args.convenio||'-',acao:args.acao,contabilizarIndicadores:args.contabilizarIndicadores!==false,
                     dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString(),
                     dataAdmissaoObj:statusDestino==='ocupado'?agora.toISOString():(dados.basePacientesCadastrados[args.pr]?.dataAdmissao||agora.toISOString())
                 });
@@ -471,7 +472,7 @@
                     setor:args.setor+' (Leito '+args.leito+')',
                     origem:args.origem||args.setor,destino:args.setor,
                     perfil:(args.perfil||'-')+(args.sexo?' ('+args.sexo+')':''),
-                    convenio:args.convenio||'-',acao:args.acao,
+                    convenio:args.convenio||'-',acao:args.acao,contabilizarIndicadores:args.contabilizarIndicadores!==false,
                     dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString()
                 });
 
@@ -526,7 +527,7 @@
                 return false;
             }
         };
-        setTimeout(function(){ window.tentarRecuperarUltimoBackupSeguroV2(); },3500);
+        // Recuperação automática desativada: preservar estritamente o estado atual; restaurar apenas manualmente após auditoria.
 
         // Recuperação única do estado imediatamente anterior ao bug de alta em massa.
         window.tentarRecuperarUltimoBackupSeguro = async function() {
@@ -561,7 +562,7 @@
                 return false;
             }catch(e){console.error('Falha na recuperação segura pós-alta:',e);return false;}
         };
-        setTimeout(function(){ window.tentarRecuperarUltimoBackupSeguro(); },2500);
+        // Recuperação automática desativada: preservar estritamente o estado atual; restaurar apenas manualmente após auditoria.
 
 // Sincronização em tempo real ao carregar a página
         window.addEventListener('DOMContentLoaded', () => {
@@ -1692,7 +1693,7 @@
         }
 
         async function salvarDadosNoFirebase(silencioso) {
-            if (!window.db) return false;
+            if (!window.db || !firebaseBaseSnapshotLocal) { if(!silencioso) alert('Sincronização ainda não inicializada. Aguarde o carregamento do banco e tente novamente.'); return false; }
             multiusuarioStatus='salvando';
             try {
                 const { doc, runTransaction } = window.firebaseModules;
@@ -1878,7 +1879,8 @@
             garantirSalasVirtuais();
             onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
                 if (docSnap.exists()) {
-                    if (multiusuarioStatus === 'salvando') return;
+                    // Snapshot remoto é a fonte oficial, inclusive após gravação local.
+
                     const data = docSnap.data();
                     firebaseBaseSnapshotLocal = normalizarFirebaseSeguro(data);
                     firebaseRevisionLocal = Number(data && data._meta && data._meta.revision || 0);
