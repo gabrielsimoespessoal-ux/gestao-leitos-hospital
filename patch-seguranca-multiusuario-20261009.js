@@ -16,6 +16,21 @@ core.forEach(nome=>{
 const original=w.executarMovimentacaoLeito;
 if(typeof original==='function')w.executarMovimentacaoLeito=async function(){
  const ac=d.getElementById('mov-acao')?.value||'';
+ if(ac==='Reserva Cirúrgica Eletiva'){
+  const get=id=>d.getElementById(id)?.value?.trim()||'';
+  const setor=get('mov-setor'),leito=get('mov-leito'),nome=get('mov-paciente'),nasc=get('mov-nascimento'),sexo=get('mov-sexo'),perfil=get('mov-perfil-vaga'),origem=get('mov-origem');
+  const medico=get('mov-medico'),dataHora=get('mov-data-cirurgia'),procedimento=get('mov-procedimento');
+  if(!setor||!leito||!nome||!nasc||!sexo||!perfil||!origem||!medico||!dataHora||!procedimento){w.alert('Preencha os campos obrigatórios e os dados específicos da cirurgia.');return;}
+  const pr=get('mov-atendimento')||('RES-'+Date.now()+'-'+Math.random().toString(36).slice(2,6));
+  const contabilizar=promptIndicador(ac,setor);
+  try{
+   const r=await w.executarEntradaLeitoAtomica({acao:ac,setor,leito,pr,nome,nasc,sexo,perfil,origem,convenio:get('mov-convenio'),precaucao:get('mov-precaucao'),previsaoAlta:get('mov-previsao-alta-paciente'),medicoCirurgiao:medico,dataHoraCirurgia:dataHora,procedimentoProposto:procedimento,contabilizarIndicadores:contabilizar,usuario:w.usuarioAtual?.nome||'usuario'});
+   if(r?.status!=='reservado')throw Error('Banco não confirmou status reservado.');
+   ['mov-atendimento','mov-paciente','mov-nascimento'].forEach(id=>{const el=d.getElementById(id);if(el)el.value='';});
+   w.alert('Reserva cirúrgica '+(r.jaExistia?'já existente e confirmada':'GRAVADA NO BANCO')+' para '+setor+' / leito '+leito+'. Aguarde a atualização do painel.');
+  }catch(e){w.alert('RESERVA NÃO CONFIRMADA: '+(e?.message||e)+'\\nConfira o status do leito antes de repetir.');}
+  return;
+ }
  if(ac==='Transferência Interna'){
   if(w.usuarioAtual?.perfil==='Visitante'){w.alert('Acesso negado.');return;}
   const get=id=>d.getElementById(id)?.value?.trim()||'';
