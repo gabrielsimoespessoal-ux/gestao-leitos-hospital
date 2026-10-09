@@ -1848,9 +1848,34 @@
             return false;
         }
 
+        // Espaços virtuais persistidos: não entram na capacidade de leitos assistenciais.
+        async function garantirSalasVirtuais() {
+            if (!window.db || !window.firebaseModules) return;
+            const {doc,runTransaction}=window.firebaseModules;
+            const ref=doc(window.db,'hospital','dados');
+            try {
+                await runTransaction(window.db,async tx=>{
+                    const snap=await tx.get(ref);
+                    if(!snap.exists()) throw new Error('Cadastro principal indisponível; nenhuma sala criada.');
+                    const dados=normalizarFirebaseSeguro(snap.data());
+                    dados.setoresData=Array.isArray(dados.setoresData)?dados.setoresData:[];
+                    let setor=dados.setoresData.find(s=>s.nome==='ESPERA VIRTUAL INTERNA');
+                    if(!setor) {setor={nome:'ESPERA VIRTUAL INTERNA',tipo:'Espera virtual — não assistencial',virtual:true,leitos:[]};dados.setoresData.push(setor);}
+                    setor.leitos=Array.isArray(setor.leitos)?setor.leitos:[];
+                    let alterado=false;
+                    for(let i=1;i<=40;i++){
+                        const nome='EV-'+String(i).padStart(2,'0');
+                        if(!setor.leitos.some(l=>String(l.n)===nome)){setor.leitos.push({n:nome,status:'disponivel',paciente:'',prontuario:'',virtual:true});alterado=true;}
+                    }
+                    if(alterado){const rev=Number(dados._meta?.revision||0)+1;dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:new Date().toISOString(),editor:'provisionamento_salas_virtuais'};tx.set(ref,dados);}
+                });
+            }catch(e){console.error('Falha ao provisionar salas virtuais sem perda de dados:',e);}
+        }
+        window.garantirSalasVirtuais=garantirSalasVirtuais;
         function carregarDadosDoFirebase() {
             if (!window.db) return;
             const { doc, onSnapshot } = window.firebaseModules;
+            garantirSalasVirtuais();
             onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
                 if (docSnap.exists()) {
                     if (multiusuarioStatus === 'salvando') return;
@@ -2941,12 +2966,12 @@
             
             var totalL = 0;
             setoresParaCalc.forEach(function(s) {
-                totalL += s.leitos.length;
+                if(!s.virtual && s.nome!=='ESPERA VIRTUAL INTERNA') totalL += s.leitos.length;
             });
 
             var totalOcpAtual = 0;
             setoresParaCalc.forEach(function(s) {
-                totalOcpAtual += s.leitos.filter(function(l) { return l.status === 'ocupado'; }).length;
+                if(!s.virtual && s.nome!=='ESPERA VIRTUAL INTERNA') totalOcpAtual += s.leitos.filter(function(l) { return l.status === 'ocupado'; }).length;
             });
             var txOcpAtualVal = totalL > 0 ? (totalOcpAtual / totalL) : 0;
             var txOcpAtualStr = (txOcpAtualVal * 100).toFixed(1) + '%';
