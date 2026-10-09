@@ -3014,6 +3014,7 @@
             var pacientesDiaAcumulado = 0;
 
             movimentacoesHistorico.forEach(function(m) {
+                if(m.contabilizarIndicadores===false) return;
                 var mData = m.dataDesfechoObj ? new Date(m.dataDesfechoObj) : new Date();
                 var dentroDoPeriodo = mData >= dataIni && mData <= dataFim;
                 if (!dentroDoPeriodo) return;
@@ -3043,8 +3044,10 @@
                         else if (!ehOrigemInterna && eventosSelecionados.includes('Reservas Externas')) countResExt++;
                     } else if (ehTrfExterna) {
                         if (eventosSelecionados.includes('Transferência Externa')) countTrfExt++;
+                        if(setorOrigemEhUTI && eventosSelecionados.includes('Alta')) countAlt++;
                     } else if (ehTrfInterna) {
                         if (eventosSelecionados.includes('Transferência Interna')) countTrfInt++;
+                        if(setorOrigemEhUTI && eventosSelecionados.includes('Alta')) countAlt++;
                     } else {
                         if (m.acao === 'Admissão' && eventosSelecionados.includes('Admissão')) countAdm++;
                         if ((m.acao.includes('Alta') || m.acao.includes('Óbito') || ehSaidaUti) && eventosSelecionados.includes('Alta')) {
