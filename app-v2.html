@@ -1733,6 +1733,18 @@
                 var auditoriaRef = doc(window.db, 'hospital', 'auditoria_' + stamp);
 
                 var base = normalizarFirebaseSeguro(firebaseBaseSnapshotLocal || {});
+                // As rotas legadas também precisam de decisão explícita sobre indicadores.
+                // A pergunta é aplicada somente a novos eventos, jamais aos históricos existentes.
+                var eventosAntigos = new Set((base.movimentacoesHistorico||[]).map(chaveHistoricoMulti));
+                (movimentacoesHistorico||[]).forEach(function(m){
+                    if(eventosAntigos.has(chaveHistoricoMulti(m))) return;
+                    if(typeof m.contabilizarIndicadores==='boolean') return;
+                    var a=String(m.acao||'');
+                    if(/admiss|alta|óbito|obito|transfer|evas|reserv/i.test(a)){
+                        var origemUti=String(m.origem||m.setor||'').toUpperCase().includes('UTI');
+                        m.contabilizarIndicadores=confirm('INDICADORES HOSPITALARES\\n\\nDeseja computar '+a+' nos indicadores?\\n'+(origemUti?'Origem UTI: transferências computadas também contam como alta da UTI.\\n':'')+'\\nOK: computar | Cancelar: não computar');
+                    }else m.contabilizarIndicadores=false;
+                });
                 var local = normalizarFirebaseSeguro({
                     setoresData: setoresData,
                     movimentacoesHistorico: movimentacoesHistorico,
