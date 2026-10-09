@@ -200,6 +200,10 @@
                     e.code='CONFLITO_REAL';throw e;
                 }
 
+                if(ehReserva && leito.status==='reservado' && String(leito.prontuario||'')===String(args.pr||'') && String(leito.paciente||'').trim().toUpperCase()===String(args.nome||'').trim().toUpperCase()){
+                    return {ok:true,jaExistia:true,status:'reservado',revisao:Number(dados._meta?.revision||0)};
+                }
+                if(ehReserva && leito.status==='ocupado') throw new Error('Não é possível reservar leito ocupado; utilize o fluxo de previsão de alta.');
                 // Na admissão, remove apenas outro vínculo ocupado do MESMO prontuário.
                 if(statusDestino==='ocupado'){
                     (dados.setoresData||[]).forEach(function(s){
@@ -215,6 +219,7 @@
                 leito.status=statusDestino;
                 leito.paciente=args.nome||'';
                 leito.prontuario=args.pr||'';
+                if(ehReserva && args.acao==='Reserva Cirúrgica Eletiva') leito.dadosCirurgicos={medico:args.medicoCirurgiao||'',dataHora:args.dataHoraCirurgia||'',procedimento:args.procedimentoProposto||''};
 
                 dados.basePacientesCadastrados=dados.basePacientesCadastrados||{};
                 dados.basePacientesCadastrados[args.pr]={
@@ -223,6 +228,7 @@
                     perfil:args.perfil||'',convenio:args.convenio||'',origem:args.origem||'',
                     precaucao:args.precaucao||'Nenhuma',
                     previsaoAlta:args.previsaoAlta||'',
+                    medicoCirurgiao:args.medicoCirurgiao||'',dataHoraCirurgia:args.dataHoraCirurgia||'',procedimentoProposto:args.procedimentoProposto||'',
                     statusInternacao: statusDestino==='ocupado'?'ativo':'reservado',
                     dataAdmissao: statusDestino==='ocupado' ? agora.toISOString() :
                         (dados.basePacientesCadastrados[args.pr]?.dataAdmissao||'')
