@@ -50,7 +50,7 @@
         badge.className='perfil-clinica-v3';
         badge.textContent='C.M';
         badge.title='Paciente de Enfermaria Clínica';
-        badge.style.cssText='position:absolute;top:-11px;left:-9px;min-width:24px;height:18px;padding:0 4px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#0f766e;color:#fff;font-size:9px;font-weight:900;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.28);z-index:5;line-height:1';
+        badge.style.cssText='position:absolute;bottom:-11px;top:auto;left:-9px;min-width:24px;height:18px;padding:0 4px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#0f766e;color:#fff;font-size:9px;font-weight:900;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.28);z-index:5;line-height:1';
         pill.appendChild(badge);
       }
 
