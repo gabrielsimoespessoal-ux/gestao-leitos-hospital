@@ -1919,6 +1919,7 @@
             const { doc, onSnapshot } = window.firebaseModules;
             garantirSalasVirtuais();
             onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
+                if(docSnap.metadata?.fromCache){multiusuarioStatus="conflito";console.warn("Dados recebidos do cache, aguardando confirmação do servidor.");return;}
                 if (docSnap.exists()) {
                     // Snapshot remoto é a fonte oficial, inclusive após gravação local.
 
@@ -1941,7 +1942,7 @@
                     renderizarPainelLeitos();
                     aplicarPermissoesInterface();
                 }
-            });
+            }, erro => {multiusuarioStatus="conflito";console.error("Sincronização interrompida",erro);alert("Conexão com banco interrompida: não considere os dados sincronizados.");});
         }
         function atualizarBadgeMultiusuario() {
             var el=document.getElementById('multiuser-status-badge');
