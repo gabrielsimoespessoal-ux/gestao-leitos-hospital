@@ -489,6 +489,35 @@
             return JSON.parse(JSON.stringify(resultado));
         };
 
+        // Movimentação atômica entre acomodações: preserva todas as outras posições.
+        window.executarTransferenciaSeguraV20261009=async function(raw){
+            const a=JSON.parse(JSON.stringify(raw||{})),ref=doc(db,'hospital','dados');
+            if(!a.pr||!a.setorDestino||!a.leitoDestino) throw new Error('Paciente e destino são obrigatórios.');
+            return runTransaction(db,async tx=>{
+                const snap=await tx.get(ref);if(!snap.exists())throw new Error('Base principal não encontrada.');
+                const dados=JSON.parse(JSON.stringify(snap.data()));
+                const all=dados.setoresData||[];
+                const destinoSetor=all.find(s=>s.nome===a.setorDestino);
+                const destino=destinoSetor?.leitos?.find(l=>String(l.n)===String(a.leitoDestino));
+                if(!destino)throw new Error('Acomodação de destino não encontrada.');
+                if(!['disponivel','reservado'].includes(destino.status) || (destino.status==='reservado' && destino.prontuario && String(destino.prontuario)!==String(a.pr))) throw new Error('Destino indisponível ou reservado por outro paciente.');
+                const origens=[];
+                all.forEach(s=>(s.leitos||[]).forEach(l=>{if(l.status==='ocupado'&&String(l.prontuario||'')===String(a.pr))origens.push({s,l});}));
+                if(origens.length!==1)throw new Error('O paciente deve possuir exatamente uma acomodação ocupada; confira a situação atual antes de transferir.');
+                const origem=origens[0];
+                if(origem.s.nome===a.setorDestino && String(origem.l.n)===String(a.leitoDestino)) throw new Error('Origem e destino são iguais.');
+                const nome=origem.l.paciente||a.nome||'';
+                origem.l.status='disponivel';origem.l.paciente='';origem.l.prontuario='';
+                destino.status='ocupado';destino.paciente=nome;destino.prontuario=a.pr;
+                const hora=new Date(), iso=hora.toISOString(), data=hora.toLocaleDateString('pt-BR')+' '+hora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+                dados.movimentacoesHistorico=Array.isArray(dados.movimentacoesHistorico)?dados.movimentacoesHistorico:[];
+                const cadastro=dados.basePacientesCadastrados?.[a.pr]||{};
+                dados.movimentacoesHistorico.unshift({data,dataIso:iso,hora:hora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:a.pr,paciente:nome,nascimento:cadastro.nascimento||'',setor:origem.s.nome+' (Leito '+origem.l.n+')',origem:origem.s.nome,destino:a.setorDestino,leitoDestino:a.leitoDestino,perfil:cadastro.perfil||'',convenio:cadastro.convenio||'',acao:'Transferência Interna',contabilizarIndicadores:a.contabilizarIndicadores!==false,altaUTI:origem.s.nome.toUpperCase().includes('UTI'),dataDesfecho:data,dataDesfechoObj:iso,dataAdmissaoObj:cadastro.dataAdmissao||iso});
+                const revision=Number(dados._meta?.revision||0)+1;dados._meta={...(dados._meta||{}),revision,previousRevision:revision-1,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'transferencia-atomica-v1'};
+                tx.set(ref,dados);return {ok:true,revision};
+            });
+        };
+
         // Recuperação adicional do estado anterior ao bug de liberação/alta em massa.
         window.tentarRecuperarUltimoBackupSeguroV2 = async function() {
             try{
