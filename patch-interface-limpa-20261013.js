@@ -32,7 +32,7 @@ try{
    set('mov-nascimento',b.nascimento);set('mov-sexo',b.sexo);set('mov-convenio',b.convenio);set('mov-origem',b.origem);
    set('mov-perfil-vaga',b.perfil);set('mov-precaucao',b.precaucao);set('mov-previsao-alta-paciente',b.previsaoAlta);
    set('mov-acao',l.status==='disponivel'?'Admissão':'');
-   d.getElementById('mov-acao')?.dispatchEvent(new Event('change',{bubbles:true}));
+   d.getElementById('mov-acao')?.dispatchEvent(new w.Event('change',{bubbles:true}));
    d.getElementById('hsj-bed-title').textContent='Leito '+numero+' · '+setor;
    d.getElementById('hsj-bed-desc').textContent='Status atual: '+l.status+(l.paciente?' | Paciente: '+l.paciente:'')+'. Salve somente após conferir os dados.';
    wrap.style.display='flex';
