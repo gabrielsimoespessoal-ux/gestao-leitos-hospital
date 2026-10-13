@@ -2333,13 +2333,13 @@
             } else if(usuarioAtual.perfil === 'Operador') {
                 if(navAdmin) navAdmin.style.display = 'none';
                 if(boxFormMov) boxFormMov.style.display = 'block';
-                if(btnLimparHist) boxFormMov.style.display = 'none';
+                if(btnLimparHist) btnLimparHist.style.display = 'none';
                 if(thAdmin) thAdmin.style.display = 'none';
                 if(thTransFinAdmin) thTransFinAdmin.style.display = 'none';
             } else {
                 if(navAdmin) navAdmin.style.display = 'none';
-                if(boxFormMov) boxFormMov.style.display = 'none';
-                if(btnLimparHist) boxFormMov.style.display = 'none';
+                if(boxFormMov) boxFormMov.style.display = usuarioAtual.perfil === 'Visitante' ? 'none' : 'block';
+                if(btnLimparHist) btnLimparHist.style.display = 'none';
                 if(thAdmin) thAdmin.style.display = 'none';
                 if(thTransFinAdmin) thTransFinAdmin.style.display = 'none';
             }
