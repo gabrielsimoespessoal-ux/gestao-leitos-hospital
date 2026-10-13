@@ -402,9 +402,9 @@
                   if(!['reservado','ocupado'].includes(ll.status))return;
                   if(args.pr && String(ll.prontuario||'')===String(args.pr))outrosVinculos.push({ss,ll});
                 });});
-                if(outrosVinculos.some(x=>x.ll.status==='ocupado'))throw new Error('Paciente já ocupa outro leito. Utilize Transferência Interna para movimentar.');
+                if(!ehReserva && outrosVinculos.some(x=>x.ll.status==='ocupado'))throw new Error('Paciente já ocupa outro leito. Utilize Transferência Interna para movimentar.');
                 if(outrosVinculos.length>1)throw new Error('Foram encontradas múltiplas reservas para este prontuário. Regularize antes de prosseguir.');
-                if(outrosVinculos.length===1){
+                if(outrosVinculos.length===1 && outrosVinculos[0].ll.status==='reservado'){
                   const antigo=outrosVinculos[0].ll;
                   antigo.status='disponivel';antigo.paciente='';antigo.prontuario='';delete antigo.dadosCirurgicos;
                 }
@@ -434,7 +434,7 @@
                     precaucao:args.precaucao||'Nenhuma',
                     previsaoAlta:args.previsaoAlta||'',
                     medicoCirurgiao:args.medicoCirurgiao||'',dataHoraCirurgia:args.dataHoraCirurgia||'',procedimentoProposto:args.procedimentoProposto||'',
-                    statusInternacao: statusDestino==='ocupado'?'ativo':'reservado',
+                    statusInternacao: statusDestino==='ocupado' || outrosVinculos.some(x=>x.ll.status==='ocupado')?'ativo':'reservado',
                     dataAdmissao: statusDestino==='ocupado' ? agora.toISOString() :
                         (dados.basePacientesCadastrados[args.pr]?.dataAdmissao||'')
                 };
