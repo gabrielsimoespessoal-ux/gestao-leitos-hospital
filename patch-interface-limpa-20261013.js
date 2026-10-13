@@ -1,9 +1,12 @@
 (()=>{
 const frame=document.getElementById('appFrame');if(!frame)return;
-frame.addEventListener('load',function(){
+let didInit=false;
+function init(){
+if(didInit)return;
 try{
  const w=frame.contentWindow,d=frame.contentDocument;
- if(!w||!d||!Array.isArray(w.setoresData))return;
+ if(!w||!d||!Array.isArray(w.setoresData)||typeof w.abrirHistoricoPacienteLeito!=='function'||!d.getElementById('box-form-mov'))return;
+ didInit=true;
  const css=d.createElement('style');
  css.textContent='#hsj-drawer-wrap{position:fixed;inset:0;background:#0f172a88;z-index:100000;display:none;justify-content:flex-end}#hsj-drawer{width:min(700px,100%);height:100%;overflow:auto;background:white;box-shadow:-8px 0 32px #0002}#hsj-drawer-head{position:sticky;top:0;background:white;padding:18px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;z-index:2}#hsj-drawer-body{padding:18px}#hsj-drawer-body .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}#hsj-trans-tools{background:#fff;border:1px solid #e2e8f0;padding:16px;margin:12px 0 16px;border-radius:12px}#hsj-trans-tools input,#hsj-trans-tools select{padding:9px;border:1px solid #cbd5e1;border-radius:8px}.hsj-kpi{border:1px solid #e2e8f0;background:#f8fafc;padding:10px 15px;border-radius:9px;min-width:105px;flex:1}.hsj-kpi strong{display:block;font-size:24px;color:#0f2747}#transferencias .table-container{overflow-x:auto;border:1px solid #e2e8f0;border-radius:10px}#transferencias th{background:#f1f5f9;white-space:nowrap}#regra-indicadores-multiusuario{display:none!important}@media(max-width:650px){#hsj-drawer-body .form-grid{grid-template-columns:1fr}}';
  d.head.appendChild(css);
@@ -71,5 +74,7 @@ try{
   atualizar();
  }
 }catch(e){console.error('Interface HSJ (sem alteração de dados):',e)}
-});
+}
+frame.addEventListener('load',()=>{didInit=false;init()});
+init();let tries=0;const interval=setInterval(()=>{init();if(didInit||++tries>=80)clearInterval(interval)},250);
 })();
