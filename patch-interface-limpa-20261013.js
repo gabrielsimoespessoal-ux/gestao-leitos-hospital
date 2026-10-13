@@ -192,3 +192,69 @@ try{
 frame.addEventListener('load',()=>{didInit=false;init()});
 init();let tries=0;const interval=setInterval(()=>{init();if(didInit||++tries>=80)clearInterval(interval)},250);
 })();
+/* Recuperação isolada do painel: mantém formulário original e suas funções de gravação. */
+(()=>{
+ const frame=document.getElementById('appFrame');if(!frame)return;
+ function recuperar(){
+  let w,d;try{w=frame.contentWindow;d=frame.contentDocument}catch(_){return false}
+  if(!w||!d||!Array.isArray(w.setoresData)||typeof w.abrirHistoricoPacienteLeito!=='function')return false;
+  if(w.__hsjDrawerRescueReady)return true;
+  const wrap=d.getElementById('hsj-drawer-wrap'),body=d.getElementById('hsj-drawer-body');
+  const form=d.getElementById('box-form-mov');
+  if(!wrap||!body||!form)return false;
+  w.__hsjDrawerRescueReady=true;
+  const abrirAnterior=w.abrirHistoricoPacienteLeito;
+  const ajustar=()=>{
+   if(form.parentElement!==body)body.appendChild(form);
+   for(const e of [body,form]){
+     e.style.setProperty('display','block','important');
+     e.style.setProperty('visibility','visible','important');
+     e.style.setProperty('opacity','1','important');
+     e.style.setProperty('height','auto','important');
+   }
+   const grade=form.querySelector('.form-grid');
+   if(grade)grade.style.setProperty('display','grid','important');
+  };
+  const abrir=(setor,leito)=>{
+   const s=w.setoresData.find(x=>x.nome===setor);
+   const l=s?.leitos?.find(x=>String(x.n)===String(leito));
+   if(!l){w.alert('Leito não encontrado. Atualize o painel.');return}
+   if(w.usuarioAtual?.perfil==='Visitante'){abrirAnterior.call(w,setor,leito);return}
+   ajustar();
+   const set=(id,val)=>{const el=d.getElementById(id);if(el)el.value=val??''};
+   set('mov-setor',setor);
+   if(typeof w.atualizarSelectLeitosMov==='function')w.atualizarSelectLeitosMov();
+   set('mov-leito',leito);
+   const base=w.basePacientesCadastrados?.[l.prontuario]||{};
+   ['mov-atendimento','mov-paciente','mov-nascimento','mov-sexo','mov-perfil-vaga','mov-convenio','mov-origem','mov-precaucao','mov-previsao-alta-paciente'].forEach(id=>set(id,''));
+   set('mov-atendimento',l.prontuario||'');
+   set('mov-paciente',l.paciente||base.nome||'');
+   for(const [id,key] of [['mov-nascimento','nascimento'],['mov-sexo','sexo'],['mov-perfil-vaga','perfil'],['mov-convenio','convenio'],['mov-origem','origem'],['mov-precaucao','precaucao'],['mov-previsao-alta-paciente','previsaoAlta']])set(id,base[key]||'');
+   set('mov-acao','');
+   const title=d.getElementById('hsj-bed-title');
+   if(title)title.textContent='Leito '+leito+' · '+setor;
+   const desc=d.getElementById('hsj-bed-desc');
+   if(desc)desc.textContent='Status: '+l.status+(l.paciente?' | Paciente: '+l.paciente:'');
+   let btn=d.getElementById('hsj-rescue-history');
+   if(!btn){
+     btn=d.createElement('button');btn.type='button';btn.id='hsj-rescue-history';btn.className='btn';
+     btn.textContent='Ver histórico do leito';btn.style.cssText='display:inline-block;margin:0 0 12px;background:#0284c7;color:white;padding:10px;border-radius:7px';
+     body.prepend(btn);
+   }
+   btn.onclick=()=>{wrap.style.display='none';abrirAnterior.call(w,setor,leito)};
+   wrap.style.display='flex';
+   ajustar();
+  };
+  w.abrirHistoricoPacienteLeito=abrir;
+  // O botão de fechar funciona mesmo quando a inicialização anterior falhou.
+  const fechar=d.getElementById('hsj-bed-close');if(fechar)fechar.onclick=()=>wrap.style.display='none';
+  const timer=setInterval(()=>{if(wrap.style.display==='flex')ajustar()},600);
+  frame.addEventListener('load',()=>clearInterval(timer),{once:true});
+  return true;
+ }
+ function iniciar(){
+  let n=0;const t=setInterval(()=>{if(recuperar()||++n>100)clearInterval(t)},200);
+  recuperar();
+ }
+ frame.addEventListener('load',iniciar);iniciar();
+})();
