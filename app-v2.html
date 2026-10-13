@@ -81,6 +81,38 @@
             return {ok:true,revision:state._meta.revision};
           });
         };
+        window.hsjSalvarSolicitacaoTransferenciaAtomica = async function(raw){
+          const a=JSON.parse(JSON.stringify(raw||{}));
+          if(!a.atendimento||!a.paciente||!a.destino)throw Error('Prontuário, paciente e destino são obrigatórios.');
+          const ref=doc(db,'hospital','dados');
+          const now=new Date(),iso=now.toISOString();
+          return runTransaction(db,async tx=>{
+            const snap=await tx.get(ref);if(!snap.exists())throw Error('Banco principal não encontrado.');
+            const data=JSON.parse(JSON.stringify(snap.data()));
+            const active=Array.isArray(data.transferenciasAtivas)?data.transferenciasAtivas:[];
+            const idx=active.findIndex(t=>String(t.atendimento||'').trim()===String(a.atendimento).trim());
+            const existing=idx>=0?active[idx]:null;
+            const born=a.nascimento||data.basePacientesCadastrados?.[a.atendimento]?.nascimento||'';
+            const patient={
+              ...(existing||{}),
+              data:existing?.data||now.toLocaleString('pt-BR'),
+              dataIso:existing?.dataIso||iso,
+              atendimento:a.atendimento,
+              atendimentoNasc:'Pront: '+a.atendimento+' | Nasc: '+born,
+              paciente:a.paciente,perfil:a.perfil+' ('+a.sexo+')',
+              destino:a.destino,status:a.status,dusv:a.dusv,
+              plataforma:a.plataforma,pendencias:a.pendencias,
+              judicial:a.judicial,compulsoria:a.compulsoria,
+              atualizadoEm:iso
+            };
+            if(idx>=0)active[idx]=patient;else active.unshift(patient);
+            data.transferenciasAtivas=active;
+            const rev=Number(data._meta?.revision||0);
+            data._meta={...(data._meta||{}),revision:rev+1,previousRevision:rev,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'transferencia-atomica-upsert'};
+            tx.set(ref,data);
+            return {ok:true,atualizada:idx>=0,revision:rev+1};
+          });
+        };
         window.hsjCriarTransferenciaPendenteSegura = async function(raw){
           const a=JSON.parse(JSON.stringify(raw||{}));if(!a.pr||!a.nome)throw Error('Prontuário e paciente são obrigatórios.');
           const ref=doc(db,'hospital','dados'),now=new Date(),iso=now.toISOString();
