@@ -729,6 +729,56 @@
             });
         };
 
+        // Regularização conservadora de vínculo duplicado: nunca move o destino e
+        // somente libera a origem se os DOIS leitos ocupados têm o mesmo prontuário.
+        window.hsjLiberarOrigemDuplicadaAtomica=async function(a){
+            const ref=doc(db,'hospital','dados');
+            if(!a||!a.pr||!a.setorOrigem||!a.leitoOrigem||!a.setorDestino||!a.leitoDestino)
+                throw Error('Dados incompletos para regularização.');
+            if(a.setorOrigem===a.setorDestino&&String(a.leitoOrigem)===String(a.leitoDestino))
+                throw Error('Origem e destino coincidem.');
+            const agora=new Date(),iso=agora.toISOString();
+            return runTransaction(db,async tx=>{
+                const snap=await tx.get(ref);
+                if(!snap.exists())throw Error('Banco de dados indisponível.');
+                const dados=JSON.parse(JSON.stringify(snap.data()));
+                const localizar=(setor,n)=>dados.setoresData?.find(s=>s.nome===setor)?.leitos?.find(l=>String(l.n)===String(n));
+                const origem=localizar(a.setorOrigem,a.leitoOrigem),destino=localizar(a.setorDestino,a.leitoDestino);
+                if(!origem||!destino)throw Error('Um dos leitos não foi localizado.');
+                if(origem.status!=='ocupado'||destino.status!=='ocupado')
+                    throw Error('Situação mudou: os dois leitos precisam estar ocupados. Nenhuma alteração realizada.');
+                if(String(origem.prontuario||'')!==String(a.pr)||String(destino.prontuario||'')!==String(a.pr))
+                    throw Error('Os prontuários dos leitos não correspondem. Nenhuma alteração realizada.');
+                const nomes=[origem.paciente,destino.paciente].filter(Boolean);
+                if(nomes.length===2&&nomes[0].trim().toLocaleUpperCase('pt-BR')!==nomes[1].trim().toLocaleUpperCase('pt-BR'))
+                    throw Error('Nomes divergentes entre origem e destino. Necessária conferência manual.');
+                const outros=[];
+                (dados.setoresData||[]).forEach(s=>(s.leitos||[]).forEach(l=>{
+                    if(l===origem||l===destino)return;
+                    if(['ocupado','reservado'].includes(l.status)&&String(l.prontuario||'')===String(a.pr))outros.push(s.nome+' / '+l.n);
+                }));
+                if(outros.length)throw Error('Existem outros vínculos desse prontuário. Exige revisão antes da liberação.');
+                origem.status='disponivel';origem.paciente='';origem.prontuario='';
+                delete origem.dadosCirurgicos;
+                const hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+                const data=agora.toLocaleDateString('pt-BR')+' '+hora;
+                dados.movimentacoesHistorico=Array.isArray(dados.movimentacoesHistorico)?dados.movimentacoesHistorico:[];
+                dados.movimentacoesHistorico.unshift({data,dataIso:iso,hora,atendimento:a.pr,
+                    paciente:destino.paciente||nomes[0]||'',setor:a.setorOrigem+' (Leito '+a.leitoOrigem+')',
+                    origem:a.setorOrigem,destino:a.setorDestino,leitoDestino:a.leitoDestino,
+                    acao:'Regularização de duplicidade após transferência',perfil:'Gestão de Leitos',
+                    contabilizarIndicadores:false,dataDesfecho:data,dataDesfechoObj:iso});
+                const rev=Number(dados._meta?.revision||0)+1;
+                dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:iso,
+                    editor:a.usuario||'usuario',safeguards:'regularizacao-duplicidade-validada'};
+                tx.set(ref,dados);
+                const auditoria=doc(db,'hospital','auditoria_duplicidade_'+iso.replace(/[:.]/g,'-'));
+                tx.set(auditoria,{criadoEm:iso,prontuario:a.pr,origem:a.setorOrigem,leitoOrigem:String(a.leitoOrigem),
+                    destino:a.setorDestino,leitoDestino:String(a.leitoDestino),usuario:a.usuario||'usuario',revision:rev});
+                return {ok:true,revision:rev};
+            });
+        };
+
         // Recuperação adicional do estado anterior ao bug de liberação/alta em massa.
         window.tentarRecuperarUltimoBackupSeguroV2 = async function() {
             try{
