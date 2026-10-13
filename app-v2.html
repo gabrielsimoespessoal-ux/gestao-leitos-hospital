@@ -26,6 +26,28 @@
         window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction };
 
         // Operações pontuais atômicas, sem substituir listas com versões locais defasadas.
+        window.hsjRegularizarReservaDuplicada=async function(raw){
+          const a=JSON.parse(JSON.stringify(raw||{}));
+          if(!a.pr||!a.setorManter||!a.leitoManter||!a.setorLiberar||!a.leitoLiberar)throw Error('Informe as duas reservas.');
+          const ref=doc(db,'hospital','dados');
+          return runTransaction(db,async tx=>{
+            const snap=await tx.get(ref);if(!snap.exists())throw Error('Banco indisponível.');
+            const state=JSON.parse(JSON.stringify(snap.data()));
+            const locate=(s,n)=>state.setoresData?.find(x=>x.nome===s)?.leitos?.find(l=>String(l.n)===String(n));
+            const keep=locate(a.setorManter,a.leitoManter),old=locate(a.setorLiberar,a.leitoLiberar);
+            if(!keep||!old||keep===old)throw Error('Leitos inválidos.');
+            if(keep.status!=='reservado'||old.status!=='reservado')throw Error('Uma reserva mudou de status. Nenhum leito foi alterado.');
+            if(String(keep.prontuario)!==String(a.pr)||String(old.prontuario)!==String(a.pr))throw Error('Prontuário não corresponde em ambos os leitos.');
+            const other=state.setoresData.some(s=>s.leitos.some(l=>l!==keep&&l!==old&&['ocupado','reservado'].includes(l.status)&&String(l.prontuario||'')===String(a.pr)));
+            if(other)throw Error('Há outros vínculos do paciente. Requer revisão manual.');
+            old.status='disponivel';old.paciente='';old.prontuario='';delete old.dadosCirurgicos;
+            const now=new Date(),iso=now.toISOString(),rev=Number(state._meta?.revision||0);
+            state.movimentacoesHistorico=Array.isArray(state.movimentacoesHistorico)?state.movimentacoesHistorico:[];
+            state.movimentacoesHistorico.unshift({data:now.toLocaleString('pt-BR'),dataIso:iso,atendimento:a.pr,paciente:keep.paciente||'',setor:a.setorLiberar+' (Leito '+a.leitoLiberar+')',origem:a.setorLiberar,destino:a.setorManter+' (Leito '+a.leitoManter+')',acao:'Regularização de reserva duplicada',contabilizarIndicadores:false,dataDesfechoObj:iso});
+            state._meta={...(state._meta||{}),revision:rev+1,previousRevision:rev,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'regularizacao-reserva-duplicada'};
+            tx.set(ref,state);return {ok:true,revision:rev+1};
+          });
+        };
         window.hsjMudarReservaLeitoAtomica=async function(raw){
           const a=JSON.parse(JSON.stringify(raw||{}));
           if(!a.setorOrigem||!a.leitoOrigem||!a.setorDestino||!a.leitoDestino)throw Error('Origem e destino são obrigatórios.');
