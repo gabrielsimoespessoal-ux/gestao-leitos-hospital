@@ -18,6 +18,28 @@ try{
  const fechar=()=>wrap.style.display='none';d.getElementById('hsj-bed-close').onclick=fechar;
  wrap.addEventListener('click',e=>{if(e.target===wrap)fechar()});
  d.addEventListener('keydown',e=>{if(e.key==='Escape')fechar()});
+
+ const encaminhar=d.createElement('button');encaminhar.type='button';encaminhar.className='btn';encaminhar.id='hsj-forward-transfer';encaminhar.textContent='↗ Encaminhar para Transferências';encaminhar.style.cssText='margin:0 0 14px 10px;background:#0e7490;color:#fff';
+ d.getElementById('hsj-drawer-body').prepend(encaminhar);
+ encaminhar.onclick=()=>{
+  const val=id=>d.getElementById(id)?.value?.trim()||'';
+  const pr=val('mov-atendimento'),nome=val('mov-paciente'),nascimento=val('mov-nascimento');
+  if(!pr||!nome){w.alert('Informe o prontuário e o nome do paciente antes de encaminhar para Transferências.');return}
+  const exists=(Array.isArray(w.transferenciasAtivas)?w.transferenciasAtivas:[]).some(t=>String(t.atendimento||'')===pr);
+  if(exists&&!w.confirm('Já existe solicitação ativa para este prontuário. Deseja abrir Transferências para acompanhar ou consultar antes de criar outra?'))return;
+  const map={'transf-atendimento':pr,'transf-paciente':nome,'transf-nascimento':nascimento,'transf-sexo':val('mov-sexo'),'transf-perfil':val('mov-perfil-vaga')};
+  Object.entries(map).forEach(([id,value])=>{const element=d.getElementById(id);if(element&&value)element.value=value});
+  fechar();
+  const el=[...d.querySelectorAll('.subnav .nav-item')].find(x=>(x.getAttribute('onclick')||'').includes("'transferencias'"));
+  if(typeof w.switchTab==='function')w.switchTab('transferencias',el);
+  const trans=d.getElementById('transferencias');
+  const formTrans=trans?.querySelector('.notes-box');
+  if(formTrans){formTrans.style.display='block';const btn=d.getElementById('hsj-new-trans');if(btn)btn.textContent='Fechar cadastro'}
+  const hint=d.getElementById('hsj-transfer-forward-hint')||d.createElement('div');
+  hint.id='hsj-transfer-forward-hint';hint.style.cssText='padding:10px 14px;margin-bottom:12px;border:1px solid #bae6fd;border-radius:9px;background:#f0f9ff;color:#075985;font-size:13px';
+  hint.textContent='Dados de '+nome+' preenchidos a partir do Painel de Leitos. Confira destino, status e pendências e clique em Salvar e Registrar Solicitação para confirmar. Nenhuma transferência foi criada automaticamente.';
+  formTrans?.prepend(hint);formTrans?.scrollIntoView({block:'start',behavior:'smooth'});
+ };
  const oldOpen=w.abrirHistoricoPacienteLeito;
  const btnHist=d.createElement('button');btnHist.className='btn';btnHist.type='button';btnHist.textContent='Ver histórico do leito';btnHist.style.marginBottom='14px';
  d.getElementById('hsj-drawer-body').prepend(btnHist);
