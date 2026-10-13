@@ -168,6 +168,47 @@
         const b=wrap.querySelector('#acao-bloq-v2'); if(b&&permitido)b.onclick=()=>w.alternarBloqueioLeitoPainelV2(setor,leito);
       };
 
+      // Regularização assistida apenas para duplicidade confirmada na mesma identidade.
+      function adicionarRegularizador(){
+        const barra=d.getElementById('gestao-bloqueios-v2');
+        if(!barra||d.getElementById('hsj-regularizar-vinculos'))return;
+        const btn=d.createElement('button');btn.type='button';btn.id='hsj-regularizar-vinculos';
+        btn.className='btn';btn.textContent='↔ Corrigir leito duplicado';
+        btn.style.cssText='background:#b45309;color:#fff;padding:8px 12px;border-radius:8px';
+        barra.appendChild(btn);
+        btn.onclick=async()=>{
+          const origemSetor='ALA A',origemLeito='L1';
+          const destinoSetor='UTI IRMÃ DULCE (INTERNO / FILANTRÓPICO)',destinoLeito='02';
+          const origem=achar(origemSetor,origemLeito)?.l,destino=achar(destinoSetor,destinoLeito)?.l;
+          if(!origem||!destino){w.alert('Não foi possível localizar os leitos.');return;}
+          if(origem.status!=='ocupado'||destino.status!=='ocupado'){
+            w.alert('A situação já mudou ou um leito não está ocupado. Atualize o painel.');return;
+          }
+          if(!origem.prontuario||String(origem.prontuario)!==String(destino.prontuario)){
+            w.alert('Prontuários diferentes ou ausentes. Não é seguro liberar o leito L1 automaticamente.');return;
+          }
+          if(w.usuarioAtual?.perfil==='Visitante'){w.alert('Acesso negado.');return;}
+          const pr=String(origem.prontuario);
+          const aviso='Regularizar duplicidade do mesmo paciente?\\n\\nMANTER: UTI INTERNO/FILANTRÓPICO — LEITO 02 (OCUPADO)\\nLIBERAR: ALA A — LEITO L1\\n\\nProntuário: '+pr+'\\n\\nO banco validará novamente os dados antes de qualquer alteração.';
+          if(!w.confirm(aviso))return;
+          try{
+            if(typeof w.hsjLiberarOrigemDuplicadaAtomica!=='function')throw Error('Módulo de regularização não carregado. Atualize a página.');
+            await w.hsjLiberarOrigemDuplicadaAtomica({pr,setorOrigem:origemSetor,leitoOrigem:origemLeito,
+               setorDestino:destinoSetor,leitoDestino:destinoLeito,usuario:w.usuarioAtual?.nome||'usuario'});
+            w.alert('Regularização confirmada no banco: UTI 02 mantido ocupado e L1 liberado. Atualize o painel para conferir.');
+          }catch(e){w.alert('Regularização não executada: '+(e?.message||e));}
+        };
+      }
+      const renderAnteriorRegularizacao=w.renderizarPainelLeitos;
+      if(typeof renderAnteriorRegularizacao==='function'){
+        w.renderizarPainelLeitos=function(){
+          const retorno=renderAnteriorRegularizacao.apply(this,arguments);
+          setTimeout(adicionarRegularizador,0);
+          return retorno;
+        };
+      }
+      adicionarRegularizador();
+
       // Para admissão, permite selecionar a própria reserva do prontuário informado.
       // A transação original valida novamente prontuário e estado no Firebase.
       const atualizarLeitosOriginal=w.atualizarSelectLeitosMov;
