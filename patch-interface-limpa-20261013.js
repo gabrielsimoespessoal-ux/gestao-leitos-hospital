@@ -29,6 +29,22 @@ try{
    body.style.setProperty('min-height','250px');
  }
  restaurarFormulario();
+ // Reparação defensiva: outros módulos podem mover ou ocultar o formulário depois da abertura.
+ // Não altera ocupação, reserva ou dados armazenados.
+ function garantirConteudoVisivel(){
+   if(wrap.style.display!=='flex')return;
+   const body=d.getElementById('hsj-drawer-body');
+   const formulario=d.getElementById('box-form-mov');
+   if(!body||!formulario)return;
+   if(formulario.parentElement!==body||getComputedStyle(formulario).display==='none')restaurarFormulario();
+   body.style.setProperty('display','block','important');
+   body.style.setProperty('visibility','visible','important');
+   const botoes=['hsj-forward-transfer','hsj-save-patient-drawer'];
+   botoes.forEach(id=>{const el=d.getElementById(id);if(el&&el.parentElement!==body)body.prepend(el);});
+   const hist=[...body.querySelectorAll('button')].find(el=>el.textContent==='Ver histórico do leito');
+   if(hist)hist.style.setProperty('display','inline-block','important');
+ }
+ setInterval(garantirConteudoVisivel,450);
  const observerForm=new MutationObserver(()=>{
    if(wrap.style.display==='flex'){
      const el=d.getElementById('box-form-mov');
@@ -85,6 +101,9 @@ try{
    d.getElementById('hsj-bed-desc').textContent='Status atual: '+l.status+(l.paciente?' | Paciente: '+l.paciente:'')+'. Salve somente após conferir os dados.';
    restaurarFormulario();
    wrap.style.display='flex';
+   garantirConteudoVisivel();
+   setTimeout(garantirConteudoVisivel,80);
+   setTimeout(garantirConteudoVisivel,350);
  };
  // Bloqueio/alta/transferência usam as funções nativas e protegidas já instaladas.
  const transfer=d.getElementById('transferencias'),tbody=d.getElementById('tabela-transf-ativas');
