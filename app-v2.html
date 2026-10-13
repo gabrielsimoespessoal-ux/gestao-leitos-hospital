@@ -25,6 +25,51 @@
         window.db = db;
         window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction };
 
+        // Operações pontuais atômicas, sem substituir listas com versões locais defasadas.
+        window.hsjSalvarEdicaoPacienteSegura = async function(raw) {
+          const a=JSON.parse(JSON.stringify(raw||{}));if(!a.pr||!a.nome)throw Error('Prontuário e nome obrigatórios.');
+          const ref=doc(db,'hospital','dados'),when=new Date().toISOString();
+          return runTransaction(db,async tx=>{
+            const snap=await tx.get(ref);if(!snap.exists())throw Error('Banco central indisponível.');
+            const state=JSON.parse(JSON.stringify(snap.data()));
+            const cadastro=(state.basePacientesCadastrados||{})[a.pr];
+            if(!cadastro)throw Error('Cadastro não localizado no banco. Atualize antes de editar.');
+            const locations=[];
+            (state.setoresData||[]).forEach(s=>(s.leitos||[]).forEach(l=>{if(String(l.prontuario||'')===String(a.pr))locations.push({s,l})}));
+            if(locations.length!==1)throw Error('Localização ambígua ou ausente; confira o prontuário.');
+            const loc=locations[0];
+            if(a.expectedSetor&&loc.s.nome!==a.expectedSetor)throw Error('Paciente mudou de setor em outro computador.');
+            if(a.expectedLeito&&String(loc.l.n)!==String(a.expectedLeito))throw Error('Paciente mudou de leito em outro computador.');
+            if(a.expectedNome&&String(loc.l.paciente||'')!==a.expectedNome)throw Error('Cadastro foi alterado em outro computador.');
+            const fields=['nome','nascimento','perfil','sexo','convenio','precaucao','origem','previsaoAlta'];
+            fields.forEach(k=>{if(a[k]!==undefined)cadastro[k]=a[k]});
+            loc.l.paciente=a.nome;
+            state._meta={...(state._meta||{}),revision:Number(state._meta?.revision||0)+1,previousRevision:Number(state._meta?.revision||0),updatedAt:when,editor:a.usuario||'usuario',safeguards:'edicao-paciente-atomica'};
+            tx.set(ref,state);
+            return {ok:true,revision:state._meta.revision};
+          });
+        };
+        window.hsjCriarTransferenciaPendenteSegura = async function(raw){
+          const a=JSON.parse(JSON.stringify(raw||{}));if(!a.pr||!a.nome)throw Error('Prontuário e paciente são obrigatórios.');
+          const ref=doc(db,'hospital','dados'),now=new Date(),iso=now.toISOString();
+          return runTransaction(db,async tx=>{
+            const snap=await tx.get(ref);if(!snap.exists())throw Error('Banco central indisponível.');
+            const state=JSON.parse(JSON.stringify(snap.data()));
+            const list=Array.isArray(state.transferenciasAtivas)?state.transferenciasAtivas:[];
+            const existing=list.find(t=>String(t.atendimento||'')===String(a.pr));
+            if(existing)return {ok:true,jaExistia:true};
+            const patient=(state.basePacientesCadastrados||{})[a.pr]||{};
+            const occupied=(state.setoresData||[]).some(s=>(s.leitos||[]).some(l=>String(l.prontuario||'')===String(a.pr)&&['ocupado','reservado'].includes(l.status)));
+            if(!occupied)throw Error('Paciente não está vinculado a leito ativo. Atualize e confira.');
+            const nasc=patient.nascimento||a.nascimento||'';
+            list.unshift({data:now.toLocaleString('pt-BR'),dataIso:iso,atendimento:a.pr,atendimentoNasc:'Pront: '+a.pr+' | Nasc: '+nasc,paciente:patient.nome||a.nome,perfil:(patient.perfil||a.perfil||'')+' ('+(patient.sexo||a.sexo||'')+')',destino:'A definir',status:'Solicitação Pendente',dusv:'NÃO',plataforma:'A definir',pendencias:'Definir destino e completar solicitação',judicial:'Judicial: NÃO',compulsoria:'Compulsória: NÃO',origemCadastro:'Painel de Leitos'});
+            state.transferenciasAtivas=list;
+            state._meta={...(state._meta||{}),revision:Number(state._meta?.revision||0)+1,previousRevision:Number(state._meta?.revision||0),updatedAt:iso,editor:a.usuario||'usuario',safeguards:'transferencia-pendente-atomica'};
+            tx.set(ref,state);return {ok:true,jaExistia:false};
+          });
+        };
+
+
         // Ponte executada NO MESMO REALM do Firebase.
         // Evita "custom Object object" em transações chamadas por scripts externos ao frame.
         window.executarAdmissaoReservaAtomica = async function(argsBrutos) {
