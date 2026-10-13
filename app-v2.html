@@ -81,6 +81,41 @@
             return {ok:true,revision:state._meta.revision};
           });
         };
+        window.hsjBaixarTransferenciaLiberandoLeito=async function(raw){
+          const a=JSON.parse(JSON.stringify(raw||{}));
+          if(!a.atendimento||!a.dataIso)throw Error('Identificação da transferência incompleta.');
+          const ref=doc(db,'hospital','dados');
+          return runTransaction(db,async tx=>{
+            const snap=await tx.get(ref);if(!snap.exists())throw Error('Banco central indisponível.');
+            const state=JSON.parse(JSON.stringify(snap.data()));
+            const list=Array.isArray(state.transferenciasAtivas)?state.transferenciasAtivas:[];
+            const idx=list.findIndex(t=>String(t.atendimento)===String(a.atendimento)&&String(t.dataIso||t.data)===String(a.dataIso));
+            if(idx<0)throw Error('A transferência não está mais ativa. Atualize o painel.');
+            const item=list[idx],matches=[];
+            (state.setoresData||[]).forEach(s=>(s.leitos||[]).forEach(l=>{
+              if(l.status==='ocupado'&&String(l.prontuario||'')===String(a.atendimento))matches.push({s,l});
+            }));
+            if(matches.length!==1)throw Error('Não foi possível confirmar um único leito ocupado pelo paciente. Nenhum dado foi modificado.');
+            const {s,l}=matches[0],oldBed=String(l.n),oldSector=s.nome;
+            if(a.setor&&a.setor!==oldSector)throw Error('Paciente mudou de setor desde a abertura da baixa.');
+            if(a.leito&&String(a.leito)!==oldBed)throw Error('Paciente mudou de leito desde a abertura da baixa.');
+            const now=new Date(),iso=now.toISOString(),data=now.toLocaleString('pt-BR');
+            l.status='disponivel';l.prontuario='';l.paciente='';
+            delete l.dadosCirurgicos;
+            list.splice(idx,1);
+            state.transferenciasAtivas=list;
+            state.transferenciasFinalizadas=Array.isArray(state.transferenciasFinalizadas)?state.transferenciasFinalizadas:[];
+            state.transferenciasFinalizadas.unshift({...item,statusFinal:'Finalizada / Baixada',dataFinalizacao:iso,setorOrigem:oldSector,leitoOrigem:oldBed});
+            state.movimentacoesHistorico=Array.isArray(state.movimentacoesHistorico)?state.movimentacoesHistorico:[];
+            const base=state.basePacientesCadastrados?.[a.atendimento]||{};
+            state.movimentacoesHistorico.unshift({data,dataIso:iso,hora:now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:a.atendimento,atendimentoNasc:item.atendimentoNasc||'',paciente:item.paciente,setor:oldSector+' (Leito '+oldBed+')',origem:oldSector,destino:item.destino,perfil:item.perfil||'',acao:'Transferência Externa',contabilizarIndicadores:a.contabilizarIndicadores===true,dataDesfecho:data,dataDesfechoObj:iso,dataAdmissaoObj:base.dataAdmissao||iso});
+            if(state.basePacientesCadastrados?.[a.atendimento]){base.statusInternacao='finalizado';base.dataSaida=iso;base.motivoSaida='Transferência Externa'}
+            const rev=Number(state._meta?.revision||0);
+            state._meta={...(state._meta||{}),revision:rev+1,previousRevision:rev,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'baixa-transferencia-e-leito-atomica'};
+            tx.set(ref,state);
+            return {ok:true,setor:oldSector,leito:oldBed,revision:rev+1};
+          });
+        };
         window.hsjSalvarSolicitacaoTransferenciaAtomica = async function(raw){
           const a=JSON.parse(JSON.stringify(raw||{}));
           if(!a.atendimento||!a.paciente||!a.destino)throw Error('Prontuário, paciente e destino são obrigatórios.');
