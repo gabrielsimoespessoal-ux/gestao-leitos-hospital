@@ -36,15 +36,45 @@ try{
    const body=d.getElementById('hsj-drawer-body');
    const formulario=d.getElementById('box-form-mov');
    if(!body||!formulario)return;
-   if(formulario.parentElement!==body||getComputedStyle(formulario).display==='none')restaurarFormulario();
+   restaurarFormulario();
+   // Alguns estilos globais escondem descendentes do painel com regras !important.
+   // Forçar toda a cadeia visual, sem alterar qualquer dado hospitalar.
+   [wrap,d.getElementById('hsj-drawer'),body,formulario].filter(Boolean).forEach(el=>{
+     el.style.setProperty('visibility','visible','important');
+     el.style.setProperty('opacity','1','important');
+   });
    body.style.setProperty('display','block','important');
-   body.style.setProperty('visibility','visible','important');
+   body.style.setProperty('height','auto','important');
+   body.style.setProperty('overflow','visible','important');
+   formulario.style.setProperty('display','block','important');
+   formulario.style.setProperty('position','relative','important');
+   formulario.style.setProperty('height','auto','important');
+   formulario.style.setProperty('max-height','none','important');
+   formulario.style.setProperty('overflow','visible','important');
+   formulario.querySelectorAll('.form-grid,.form-group,h3,button').forEach(el=>{
+     el.style.setProperty('visibility','visible','important');
+     el.style.setProperty('opacity','1','important');
+   });
+   const grid=formulario.querySelector('.form-grid');
+   if(grid)grid.style.setProperty('display','grid','important');
+   const warning=d.getElementById('hsj-drawer-recovery-warning');
+   if(!formulario.querySelector('#mov-acao')||!formulario.querySelector('#mov-leito')){
+     if(!warning){
+       const p=d.createElement('p');p.id='hsj-drawer-recovery-warning';
+       p.style.cssText='padding:12px;background:#fef2f2;color:#991b1b;border:1px solid #fecaca';
+       p.textContent='O formulário de gerenciamento não foi encontrado. Feche esta janela e atualize a página. Nenhuma operação foi executada.';
+       body.prepend(p);
+     }
+   }else if(warning)warning.remove();
    const botoes=['hsj-forward-transfer','hsj-save-patient-drawer'];
    botoes.forEach(id=>{const el=d.getElementById(id);if(el&&el.parentElement!==body)body.prepend(el);});
    const hist=[...body.querySelectorAll('button')].find(el=>el.textContent==='Ver histórico do leito');
    if(hist)hist.style.setProperty('display','inline-block','important');
  }
  setInterval(garantirConteudoVisivel,450);
+ // Repara também quando outro script altera o conteúdo sem modificar o estilo da janela.
+ const observerConteudo=new MutationObserver(()=>{if(wrap.style.display==='flex')garantirConteudoVisivel();});
+ observerConteudo.observe(d.body,{childList:true,subtree:false});
  const observerForm=new MutationObserver(()=>{
    if(wrap.style.display==='flex'){
      const el=d.getElementById('box-form-mov');
