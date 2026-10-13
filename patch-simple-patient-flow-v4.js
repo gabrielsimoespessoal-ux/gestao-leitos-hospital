@@ -292,6 +292,39 @@
         const botaoConfirmar=d.getElementById('btn-confirmar-acao-v5');
         if(botaoConfirmar)botaoConfirmar.onclick=confirmarAcaoOperacionalPainel;
 
+        // Botão inserido no MESMO modal real de edição do paciente.
+        if(blocoAcao && !d.getElementById('hsj-encaminhamento-real-v6')){
+          const bt=d.createElement('button');bt.type='button';bt.id='hsj-encaminhamento-real-v6';
+          bt.className='btn';bt.textContent='↗ Encaminhar para Transferências';
+          bt.style.cssText='display:block;width:100%;padding:12px;margin-top:12px;background:#0e7490;color:white;border-radius:8px;font-weight:700';
+          blocoAcao.appendChild(bt);
+          bt.onclick=function(){
+            if(w.usuarioAtual?.perfil==='Visitante'){w.alert('Acesso de visitante não permite solicitação de transferência.');return}
+            const val=id=>String(d.getElementById(id)?.value||'').trim();
+            const pr=val('edit-prontuario-vis-v3')||val('edit-prontuario');
+            const nome=val('edit-nome');
+            if(!pr||!nome){w.alert('Informe o nome e o prontuário do paciente.');return}
+            const ja=(w.transferenciasAtivas||[]).some(t=>String(t.atendimento||'')===pr);
+            if(ja&&!w.confirm('Já existe transferência ativa para este prontuário. Abrir a aba para conferir?'))return;
+            const set=(id,v)=>{const field=d.getElementById(id);if(field&&v)field.value=v};
+            set('transf-atendimento',pr);set('transf-paciente',nome);
+            set('transf-nascimento',val('edit-nasc'));set('transf-sexo',val('edit-sexo-v3'));set('transf-perfil',val('edit-perfil'));
+            const modal=d.getElementById('modal-editar-paciente');if(modal)modal.style.display='none';
+            const nav=[...d.querySelectorAll('.subnav .nav-item')].find(e=>(e.getAttribute('onclick')||'').includes("'transferencias'"));
+            if(typeof w.switchTab==='function')w.switchTab('transferencias',nav);
+            const form=d.getElementById('transferencias')?.querySelector('.notes-box');
+            if(form){
+              form.style.display='block';
+              const toggle=d.getElementById('hsj-new-trans');if(toggle)toggle.textContent='Fechar cadastro';
+              let alertBox=d.getElementById('hsj-forward-alert-v6');
+              if(!alertBox){alertBox=d.createElement('p');alertBox.id='hsj-forward-alert-v6';alertBox.style.cssText='background:#eff6ff;color:#075985;padding:12px;border-radius:8px';form.prepend(alertBox)}
+              alertBox.textContent='Dados de '+nome+' preenchidos. Confira o destino e as pendências antes de salvar a solicitação.';
+              form.scrollIntoView({block:'start',behavior:'smooth'});
+            }
+          };
+        }
+
+
         w.salvarEdicaoPaciente=async function(){
           const oldPr=d.getElementById('edit-prontuario').value;
           const newPr=d.getElementById('edit-prontuario-vis-v3').value.trim()||oldPr;
