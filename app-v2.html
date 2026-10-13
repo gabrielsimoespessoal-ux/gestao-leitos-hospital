@@ -25,6 +25,30 @@
         window.db = db;
         window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction };
 
+        // Catálogo independente: não altera o documento principal de pacientes/leitos.
+        window.hsjAdicionarMedicoCatalogo = async function(nomeBruto) {
+          const nome=String(nomeBruto||'').trim().replace(/\s+/g,' ');
+          if(nome.length<3||nome.length>120)throw Error('Informe um nome válido (3 a 120 caracteres).');
+          const ref=doc(db,'hospital','catalogo_medicos');
+          const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLocaleLowerCase('pt-BR');
+          await runTransaction(db,async tx=>{
+            const snap=await tx.get(ref);
+            const names=Array.isArray(snap.data()?.nomes)?snap.data().nomes:[];
+            if(!names.some(x=>norm(x)===norm(nome))){
+              names.push(nome);
+              names.sort((a,b)=>a.localeCompare(b,'pt-BR'));
+              tx.set(ref,{nomes:names,atualizadoEm:new Date().toISOString()});
+            }
+          });
+          return {ok:true,nome};
+        };
+        window.hsjObservarCatalogoMedicos = function(callback) {
+          return onSnapshot(doc(db,'hospital','catalogo_medicos'),
+            snap=>callback(Array.isArray(snap.data()?.nomes)?snap.data().nomes:[]),
+            err=>callback(null,err));
+        };
+
+
         // Operações pontuais atômicas, sem substituir listas com versões locais defasadas.
         window.hsjRegularizarReservaDuplicada=async function(raw){
           const a=JSON.parse(JSON.stringify(raw||{}));
