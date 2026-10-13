@@ -168,6 +168,51 @@
         const b=wrap.querySelector('#acao-bloq-v2'); if(b&&permitido)b.onclick=()=>w.alternarBloqueioLeitoPainelV2(setor,leito);
       };
 
+      // Para admissão, permite selecionar a própria reserva do prontuário informado.
+      // A transação original valida novamente prontuário e estado no Firebase.
+      const atualizarLeitosOriginal=w.atualizarSelectLeitosMov;
+      if(typeof atualizarLeitosOriginal==='function'){
+        function oferecerReservaPropria(){
+          const setorNome=d.getElementById('mov-setor')?.value;
+          const pr=String(d.getElementById('mov-atendimento')?.value||'').trim();
+          const acao=d.getElementById('mov-acao')?.value;
+          const select=d.getElementById('mov-leito');
+          if(!select||acao!=='Admissão'||!pr)return;
+          const setor=w.setoresData.find(x=>x.nome===setorNome);
+          if(!setor)return;
+          const reservas=(setor.leitos||[]).filter(l=>l.status==='reservado'&&String(l.prontuario||'').trim()===pr);
+          if(!reservas.length)return;
+          const atual=select.value;
+          for(const l of reservas){
+            if(!Array.from(select.options).some(o=>o.value===String(l.n))){
+              const option=d.createElement('option');
+              option.value=String(l.n);
+              option.textContent='Leito '+l.n+' (reservado para este paciente — confirmar internação)';
+              select.appendChild(option);
+            }
+          }
+          const reservado=reservas.find(l=>String(l.n)===String(atual))||reservas[0];
+          select.value=String(reservado.n);
+        }
+        w.atualizarSelectLeitosMov=function(){
+          const retorno=atualizarLeitosOriginal.apply(this,arguments);
+          oferecerReservaPropria();
+          return retorno;
+        };
+        const prInput=d.getElementById('mov-atendimento');
+        if(prInput)prInput.addEventListener('input',()=>setTimeout(oferecerReservaPropria,0));
+        const acaoInput=d.getElementById('mov-acao');
+        if(acaoInput)acaoInput.addEventListener('change',()=>setTimeout(()=>w.atualizarSelectLeitosMov(),0));
+        const setorInput=d.getElementById('mov-setor');
+        if(setorInput)setorInput.addEventListener('change',()=>setTimeout(oferecerReservaPropria,0));
+        const obs=new MutationObserver(()=>oferecerReservaPropria());
+        const select=d.getElementById('mov-leito');
+        // Observar somente abertura/preenchimento do formulário, evitando loops.
+        const drawer=d.getElementById('hsj-drawer-wrap');
+        if(drawer)obs.observe(drawer,{attributes:true,attributeFilter:['style']});
+        oferecerReservaPropria();
+      }
+
       aplicarExtras();
     }catch(e){console.error('Erro no patch de gestão de leitos:',e);}
   });
