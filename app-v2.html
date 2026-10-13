@@ -348,6 +348,21 @@
                     return {ok:true,jaExistia:true,status:'reservado',revisao:Number(dados._meta?.revision||0)};
                 }
                 if(ehReserva && leito.status==='ocupado') throw new Error('Não é possível reservar leito ocupado; utilize o fluxo de previsão de alta.');
+                // Previne duplo vínculo ao criar reserva ou admitir paciente.
+                // Não libera automaticamente outro leito ocupado.
+                const outrosVinculos=[];
+                (dados.setoresData||[]).forEach(function(ss){(ss.leitos||[]).forEach(function(ll){
+                  if(ss.nome===args.setor && String(ll.n)===String(args.leito))return;
+                  if(!['reservado','ocupado'].includes(ll.status))return;
+                  if(args.pr && String(ll.prontuario||'')===String(args.pr))outrosVinculos.push({ss,ll});
+                });});
+                if(outrosVinculos.some(x=>x.ll.status==='ocupado'))throw new Error('Paciente já ocupa outro leito. Utilize Transferência Interna para movimentar.');
+                if(outrosVinculos.length>1)throw new Error('Foram encontradas múltiplas reservas para este prontuário. Regularize antes de prosseguir.');
+                if(outrosVinculos.length===1){
+                  const antigo=outrosVinculos[0].ll;
+                  antigo.status='disponivel';antigo.paciente='';antigo.prontuario='';delete antigo.dadosCirurgicos;
+                }
+                // Compatibilidade com o restante do fluxo: não altera históricos anteriores.
                 // Na admissão, remove apenas outro vínculo ocupado do MESMO prontuário.
                 if(statusDestino==='ocupado'){
                     (dados.setoresData||[]).forEach(function(s){
