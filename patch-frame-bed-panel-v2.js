@@ -68,7 +68,7 @@
           d.getElementById('btn-bloqueados-v2').onclick=()=>{filtro='bloqueados';aplicarExtras();};
           d.getElementById('btn-todos-v2').onclick=()=>{filtro='todos';aplicarExtras();};
         }
-        atalhoUti17();
+        atalhoDesbloquear();
         const badge=d.getElementById('badge-bloqueios-v2'); if(badge) badge.textContent=totalBloqueados()+' bloqueado(s)';
         const boxes=[...d.querySelectorAll('#painel-setores-detalhado .sector-box')];
         boxes.forEach((box,i)=>{
@@ -122,25 +122,37 @@
         }catch(e){w.alert('Não foi possível alterar o leito: '+(e&&e.message||e));}
       };
 
-      // Controle de um clique para o leito 17, sem alterar nenhum outro leito.
-      function atalhoUti17(){
-        const painel=d.getElementById('painel');
-        if(!painel)return;
-        const setor='UTI IRMÃ DULCE (SUS)',leito='17';
-        const ref=achar(setor,leito);
-        if(!ref||!ref.l)return;
-        let botao=d.getElementById('atalho-uti17-gestao');
+      // Ação geral de desbloqueio: lista somente leitos bloqueados.
+      function atalhoDesbloquear(){
+        const barra=d.getElementById('gestao-bloqueios-v2');
+        if(!barra)return;
+        const velho=d.getElementById('atalho-uti17-gestao');if(velho)velho.remove();
+        let botao=d.getElementById('atalho-desbloquear-leitos');
         if(!botao){
-          botao=d.createElement('button');botao.id='atalho-uti17-gestao';botao.type='button';
-          botao.className='btn';botao.style.cssText='padding:8px 12px;background:#047857;color:white;border-radius:8px;font-weight:700';
-          const barra=d.getElementById('gestao-bloqueios-v2');
-          if(barra)barra.appendChild(botao);
-          botao.onclick=()=>w.alternarBloqueioLeitoPainelV2(setor,leito,'disponivel');
+          botao=d.createElement('button');botao.id='atalho-desbloquear-leitos';
+          botao.type='button';botao.className='btn';
+          botao.style.cssText='padding:8px 12px;background:#047857;color:white;border-radius:8px;font-weight:700';
+          botao.textContent='🔓 Desbloquear leitos';
+          barra.appendChild(botao);
+          botao.onclick=()=>{
+            const bloqueados=w.setoresData.flatMap(s=>(s.leitos||[]).filter(l=>l.status==='bloqueado').map(l=>({setor:s.nome,leito:l.n})));
+            if(!bloqueados.length){w.alert('Nenhum leito bloqueado no momento.');return;}
+            const antigo=d.getElementById('modal-desbloquear-leitos');if(antigo)antigo.remove();
+            const overlay=d.createElement('div');overlay.id='modal-desbloquear-leitos';
+            overlay.style.cssText='position:fixed;inset:0;z-index:999999;background:#0f172a99;display:flex;align-items:center;justify-content:center;padding:16px';
+            const box=d.createElement('section');box.style.cssText='background:white;border-radius:12px;padding:20px;width:min(540px,100%);max-height:85vh;overflow:auto;box-shadow:0 20px 55px #0004';
+            const heading=d.createElement('h3');heading.textContent='🔓 Desbloquear leitos';heading.style.margin='0 0 8px';
+            const info=d.createElement('p');info.textContent='Escolha o leito bloqueado que deseja disponibilizar. Nenhum outro leito será alterado.';info.style.cssText='font-size:14px;color:#475569';
+            const select=d.createElement('select');select.style.cssText='width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;margin:12px 0';
+            bloqueados.forEach((l,i)=>{const opt=d.createElement('option');opt.value=String(i);opt.textContent=l.setor+' — Leito '+l.leito;select.appendChild(opt);});
+            const actions=d.createElement('div');actions.style.cssText='display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap';
+            const cancelar=d.createElement('button');cancelar.type='button';cancelar.className='btn';cancelar.textContent='Cancelar';cancelar.onclick=()=>overlay.remove();
+            const confirmar=d.createElement('button');confirmar.type='button';confirmar.className='btn';confirmar.textContent='🔓 Desbloquear selecionado';confirmar.style.background='#047857';
+            confirmar.onclick=async()=>{const escolhido=bloqueados[Number(select.value)];if(!escolhido)return;overlay.remove();await w.alternarBloqueioLeitoPainelV2(escolhido.setor,escolhido.leito,'disponivel');};
+            actions.append(cancelar,confirmar);box.append(heading,info,select,actions);overlay.appendChild(box);d.body.appendChild(overlay);
+            overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+          };
         }
-        const st=ref.l.status;
-        botao.textContent='UTI 17: '+statusLabel(st)+' · Disponibilizar';
-        botao.disabled=(st==='disponivel'||st==='ocupado'||st==='reservado');
-        botao.title=botao.disabled?'Leito disponível ou em uso: nenhuma alteração permitida':'Clique para deixar somente o leito 17 disponível';
       }
 
       w.abrirHistoricoPacienteLeito=function(setor,leito){
