@@ -1683,10 +1683,14 @@
         w.executarMovimentacaoLeito=async function(){
           garantirCampoPrevisaoAltaV14();
           const pr=d.getElementById('mov-atendimento')?.value.trim();
+          const acaoAntesPrevAltaV14=d.getElementById('mov-acao')?.value||'';
           const previsao=d.getElementById('mov-previsao-alta-paciente-v14')?.value||'';
           const r=execAntesPrevAltaPacienteV14.apply(w,arguments);
           if(r&&typeof r.then==='function')await r;
-          if(pr&&w.basePacientesCadastrados?.[pr]){
+          // Saídas e reservas atômicas já foram gravadas no servidor.
+          // Regravar todo o estado local aqui pode restaurar um paciente após a alta.
+          if(pr&&w.basePacientesCadastrados?.[pr] &&
+             !['Alta Hospitalar','Alta a Pedido','Evasão','Óbito','Transferência Externa','Disponível','Reservado','Admissão','Reserva Cirúrgica Eletiva'].includes(acaoAntesPrevAltaV14)){
             w.basePacientesCadastrados[pr].previsaoAlta=previsao;
             if(typeof w.salvarDadosNoFirebase==='function')await w.salvarDadosNoFirebase();
             if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
