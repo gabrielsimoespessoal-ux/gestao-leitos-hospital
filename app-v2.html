@@ -26,6 +26,38 @@
         window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction };
 
         // Operações pontuais atômicas, sem substituir listas com versões locais defasadas.
+        window.hsjMudarReservaLeitoAtomica=async function(raw){
+          const a=JSON.parse(JSON.stringify(raw||{}));
+          if(!a.setorOrigem||!a.leitoOrigem||!a.setorDestino||!a.leitoDestino)throw Error('Origem e destino são obrigatórios.');
+          const reference=doc(db,'hospital','dados');
+          return runTransaction(db,async tx=>{
+            const snap=await tx.get(reference);if(!snap.exists())throw Error('Banco de dados indisponível.');
+            const state=JSON.parse(JSON.stringify(snap.data())),setores=state.setoresData||[];
+            const origSet=setores.find(s=>s.nome===a.setorOrigem),dstSet=setores.find(s=>s.nome===a.setorDestino);
+            const orig=origSet?.leitos?.find(l=>String(l.n)===String(a.leitoOrigem));
+            const dst=dstSet?.leitos?.find(l=>String(l.n)===String(a.leitoDestino));
+            if(!orig||!dst)throw Error('Leito não encontrado no banco.');
+            if(orig===dst)throw Error('Selecione outro leito.');
+            if(orig.status!=='reservado')throw Error('O leito de origem não está mais reservado.');
+            if(dst.status!=='disponivel')throw Error('O destino não está mais disponível. Atualize e escolha outro leito.');
+            if(String(orig.prontuario||'')!==String(a.prontuario||'')||String(orig.paciente||'')!==String(a.paciente||''))throw Error('Reserva alterada em outro computador; atualize o painel.');
+            const nome=orig.paciente||'',pr=orig.prontuario||'';
+            const existing=setores.some(s=>s.leitos.some(l=>l!==orig&&['ocupado','reservado'].includes(l.status)&&((pr&&String(l.prontuario||'')===pr)||(!pr&&nome&&String(l.paciente||'')===nome))));
+            if(existing)throw Error('Há outro vínculo ativo para este paciente; verifique antes da mudança.');
+            const extras={...orig};
+            Object.keys(orig).forEach(k=>{if(k!=='n')delete orig[k]});
+            orig.status='disponivel';orig.paciente='';orig.prontuario='';
+            Object.entries(extras).forEach(([k,v])=>{if(k!=='n')dst[k]=v});
+            dst.status='reservado';
+            const now=new Date(),iso=now.toISOString(),data=now.toLocaleString('pt-BR');
+            state.movimentacoesHistorico=Array.isArray(state.movimentacoesHistorico)?state.movimentacoesHistorico:[];
+            state.movimentacoesHistorico.unshift({data,dataIso:iso,hora:now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:pr||'-',paciente:nome,origem:a.setorOrigem+' (Leito '+a.leitoOrigem+')',destino:a.setorDestino+' (Leito '+a.leitoDestino+')',setor:a.setorOrigem+' (Leito '+a.leitoOrigem+')',acao:'Mudança de Leito Reservado',contabilizarIndicadores:false,dataDesfecho:data,dataDesfechoObj:iso});
+            const previous=Number(state._meta?.revision||0);
+            state._meta={...(state._meta||{}),revision:previous+1,previousRevision:previous,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'mudanca-reserva-atomica'};
+            tx.set(reference,state);
+            return {ok:true,revision:previous+1};
+          });
+        };
         window.hsjSalvarEdicaoPacienteSegura = async function(raw) {
           const a=JSON.parse(JSON.stringify(raw||{}));if(!a.pr||!a.nome)throw Error('Prontuário e nome obrigatórios.');
           const ref=doc(db,'hospital','dados'),when=new Date().toISOString();
