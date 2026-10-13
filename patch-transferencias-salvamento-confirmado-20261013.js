@@ -12,11 +12,12 @@ function init(){
   const val=id=>String(d.getElementById(id)?.value||'').trim();
   const data={
    atendimento:val('transf-atendimento'),paciente:val('transf-paciente'),nascimento:val('transf-nascimento'),
-   perfil:val('transf-perfil'),sexo:val('transf-sexo'),destino:val('transf-destino'),
+   perfil:val('transf-perfil'),sexo:val('transf-sexo'),destino:val('transf-destino')==='__OUTRA_UNIDADE__'?val('hsj-outra-unidade-destino'):val('transf-destino'),
    status:val('transf-status'),dusv:val('transf-dusv'),plataforma:val('transf-plataforma'),
    pendencias:val('transf-pendencias'),judicial:val('transf-judicial'),compulsoria:val('transf-compulsoria'),
    usuario:w.usuarioAtual?.nome||'usuario'
   };
+  if(val('transf-destino')==='__OUTRA_UNIDADE__'&&!data.destino){w.alert('Digite o nome da unidade de destino.');return}
   if(!data.atendimento||!data.paciente||!data.destino){w.alert('Informe o prontuário, nome e destino antes de salvar.');return}
   if(w.usuarioAtual?.perfil==='Visitante'){w.alert('Perfil sem permissão de alteração.');return}
   saving=true;
