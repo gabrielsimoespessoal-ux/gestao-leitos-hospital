@@ -14,7 +14,14 @@ try{
  const form=d.getElementById('box-form-mov');if(!form)return;
  const wrap=d.createElement('div');wrap.id='hsj-drawer-wrap';
  wrap.innerHTML='<section id="hsj-drawer" role="dialog" aria-modal="true"><header id="hsj-drawer-head"><div><strong id="hsj-bed-title" style="font-size:20px;color:#0f2747">Gerenciar leito</strong><div id="hsj-bed-desc" style="font-size:13px;color:#64748b"></div></div><button type="button" class="btn" id="hsj-bed-close">Fechar ✕</button></header><div id="hsj-drawer-body"></div></section>';
- d.body.appendChild(wrap);d.getElementById('hsj-drawer-body').appendChild(form);
+ d.body.appendChild(wrap);
+ // Manter o formulário original no painel, com todos os eventos já conectados.
+ d.getElementById('hsj-drawer-body').appendChild(form);
+ // A mensagem fica fora do corpo para que um CSS que esconda o corpo não deixe a janela vazia.
+ const aviso=d.createElement('div');aviso.id='hsj-drawer-diagnostico';
+ aviso.style.cssText='display:none;padding:12px 18px;color:#9a3412;background:#fff7ed;border-bottom:1px solid #fed7aa;font-size:13px';
+ aviso.textContent='O formulário não está visível. Tente fechar e reabrir esta janela. Nenhuma movimentação foi realizada.';
+ d.getElementById('hsj-drawer-head').after(aviso);
  // Recupera o formulário quando estilos de outras abas o ocultam.
  function restaurarFormulario(){
    const body=d.getElementById('hsj-drawer-body');
@@ -57,6 +64,18 @@ try{
    });
    const grid=formulario.querySelector('.form-grid');
    if(grid)grid.style.setProperty('display','grid','important');
+   // Corrige a ocultação causada por regras em elementos ancestrais do formulário.
+   let pai=formulario.parentElement;
+   while(pai&&pai!==d.body){
+     if(pai!==wrap){
+       pai.style.setProperty('visibility','visible','important');
+       pai.style.setProperty('opacity','1','important');
+       if(pai===body)pai.style.setProperty('display','block','important');
+     }
+     pai=pai.parentElement;
+   }
+   const aviso=d.getElementById('hsj-drawer-diagnostico');
+   if(aviso)aviso.style.display=(formulario.getClientRects().length===0||formulario.getBoundingClientRect().height<50)?'block':'none';
    const warning=d.getElementById('hsj-drawer-recovery-warning');
    if(!formulario.querySelector('#mov-acao')||!formulario.querySelector('#mov-leito')){
      if(!warning){
