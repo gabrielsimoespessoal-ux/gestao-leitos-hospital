@@ -15,6 +15,29 @@ try{
  const wrap=d.createElement('div');wrap.id='hsj-drawer-wrap';
  wrap.innerHTML='<section id="hsj-drawer" role="dialog" aria-modal="true"><header id="hsj-drawer-head"><div><strong id="hsj-bed-title" style="font-size:20px;color:#0f2747">Gerenciar leito</strong><div id="hsj-bed-desc" style="font-size:13px;color:#64748b"></div></div><button type="button" class="btn" id="hsj-bed-close">Fechar ✕</button></header><div id="hsj-drawer-body"></div></section>';
  d.body.appendChild(wrap);d.getElementById('hsj-drawer-body').appendChild(form);
+ // Recupera o formulário quando estilos de outras abas o ocultam.
+ function restaurarFormulario(){
+   const body=d.getElementById('hsj-drawer-body');
+   const formulario=d.getElementById('box-form-mov');
+   if(!body||!formulario)return;
+   if(formulario.parentElement!==body)body.appendChild(formulario);
+   formulario.style.setProperty('display','block','important');
+   formulario.style.setProperty('visibility','visible','important');
+   formulario.style.setProperty('opacity','1','important');
+   body.style.setProperty('display','block','important');
+   body.style.setProperty('visibility','visible','important');
+   body.style.setProperty('min-height','250px');
+ }
+ restaurarFormulario();
+ const observerForm=new MutationObserver(()=>{
+   if(wrap.style.display==='flex'){
+     const el=d.getElementById('box-form-mov');
+     if(el&&el.parentElement!==d.getElementById('hsj-drawer-body'))restaurarFormulario();
+     else if(el&&getComputedStyle(el).display==='none')restaurarFormulario();
+   }
+ });
+ observerForm.observe(wrap,{attributes:true,attributeFilter:['style']});
+
  const fechar=()=>wrap.style.display='none';d.getElementById('hsj-bed-close').onclick=fechar;
  wrap.addEventListener('click',e=>{if(e.target===wrap)fechar()});
  d.addEventListener('keydown',e=>{if(e.key==='Escape')fechar()});
@@ -60,6 +83,7 @@ try{
    d.getElementById('mov-acao')?.dispatchEvent(new w.Event('change',{bubbles:true}));
    d.getElementById('hsj-bed-title').textContent='Leito '+numero+' · '+setor;
    d.getElementById('hsj-bed-desc').textContent='Status atual: '+l.status+(l.paciente?' | Paciente: '+l.paciente:'')+'. Salve somente após conferir os dados.';
+   restaurarFormulario();
    wrap.style.display='flex';
  };
  // Bloqueio/alta/transferência usam as funções nativas e protegidas já instaladas.
