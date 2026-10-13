@@ -16,7 +16,7 @@
   box.addEventListener('click',e=>{if(e.target===box)cancel()});
   function findReservation(){
     const pr=d.getElementById('edit-prontuario')?.value||'';
-    for(const s of w.setoresData||[])for(const l of s.leitos||[])if(l.status==='reservado'&&String(l.prontuario||'')===pr)return {s,l};
+    for(const s of w.setoresData||[])for(const l of s.leitos||[])if(l.status==='reservado'&&pr&&String(l.prontuario||'')===pr)return {s,l};
     return null;
   }
   function updateButton(){button.style.display=findReservation()&&w.usuarioAtual?.perfil!=='Visitante'?'block':'none'}
