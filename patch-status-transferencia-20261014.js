@@ -6,8 +6,24 @@ function init(){
  if(!w||!d||typeof w.atualizarTabelasTransferencias!=='function'||typeof w.hsjAtualizarStatusTransferenciaAtomico!=='function')return false;
  if(w.__hsjStatusTransferenciasV1)return true;
  w.__hsjStatusTransferenciasV1=true;
- const estados=['Solicitação Pendente','Vaga Solicitada','Aguardando liberação','Autorizada','Vaga Liberada'];
+ const estados=['Solicitação Pendente','Vaga Solicitada','Aguardando liberação','Vaga Liberada'];
+ const esc=x=>String(x??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ const renderFinalizadas=()=>{
+  const tb=d.getElementById('tabela-transf-finalizadas');if(!tb)return;
+  const arr=Array.isArray(w.transferenciasFinalizadas)?w.transferenciasFinalizadas:[];
+  tb.innerHTML='';
+  if(!arr.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:#64748b">Nenhuma transferência finalizada.</td></tr>';return}
+  arr.forEach(t=>{
+   const tr=d.createElement('tr');
+   const cells=[t.dataFinalizacao?new Date(t.dataFinalizacao).toLocaleString('pt-BR'):t.data||'-',
+    t.atendimentoNasc||('Pront: '+(t.atendimento||'-')),t.paciente||'-',t.destino||'-',
+    t.perfil||'-',t.statusFinal||'Finalizada / Baixada','DUSV: '+(t.dusv||'-'),'-'];
+   cells.forEach((v,i)=>{const td=d.createElement('td');td.textContent=String(v);if(i===5)td.style.cssText='font-weight:600;color:#059669';tr.appendChild(td)});
+   tb.appendChild(tr);
+  });
+ };
  const refresh=()=>{
+  renderFinalizadas();
   const tb=d.getElementById('tabela-transf-ativas');if(!tb)return;
   [...tb.rows].forEach((tr,index)=>{
    const item=w.transferenciasAtivas?.[index];if(!item||tr.cells.length<9)return;
