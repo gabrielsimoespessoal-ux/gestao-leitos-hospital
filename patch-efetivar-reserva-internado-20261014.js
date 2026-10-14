@@ -1,45 +1,44 @@
 (()=>{
 const frame=document.getElementById('appFrame');if(!frame)return;
 let timer;
-function setup(){
+function init(){
  let w,d;try{w=frame.contentWindow;d=frame.contentDocument}catch(_){return false}
- if(!w||!d||typeof w.executarMovimentacaoLeito!=='function'||typeof w.executarTransferenciaSeguraV20261009!=='function'||!Array.isArray(w.setoresData))return false;
- if(w.__hsjEfetivarReservaInternado20261014)return true;
- const anterior=w.executarMovimentacaoLeito;
- w.executarMovimentacaoLeito=async function(){
-  const v=id=>String(d.getElementById(id)?.value||'').trim();
-  const ac=v('mov-acao'),pr=v('mov-atendimento'),setor=v('mov-setor'),n=v('mov-leito');
-  if(ac!=='Admissão'||!pr||!setor||!n)return anterior.apply(this,arguments);
-  const origem=[];
-  w.setoresData.forEach(s=>(s.leitos||[]).forEach(l=>{if(l.status==='ocupado'&&String(l.prontuario||'')===pr)origem.push({s,l})}));
-  if(!origem.length)return anterior.apply(this,arguments);
-  const destino=w.setoresData.find(s=>s.nome===setor)?.leitos?.find(l=>String(l.n)===n);
-  if(!destino||destino.status!=='reservado'||String(destino.prontuario||'')!==pr){
-   w.alert('Este paciente já está internado. Para mudar de leito, selecione Transferência Interna e o leito de destino. Nenhuma segunda admissão foi realizada.');return;
-  }
-  if(origem.length!==1){w.alert('Paciente possui ocupações duplicadas. Regularize os leitos antes de transferir.');return}
-  if(w.usuarioAtual?.perfil==='Visitante'){w.alert('Acesso negado.');return}
-  const o=origem[0],nome=o.l.paciente||v('mov-paciente');
-  if(!w.confirm('EFETIVAR RESERVA POR TRANSFERÊNCIA INTERNA?\n\nPaciente: '+nome+'\nProntuário: '+pr+'\nSAIR: '+o.s.nome+' / '+o.l.n+'\nOCUPAR: '+setor+' / '+n+'\n\nA reserva será consumida e o leito anterior liberado somente após confirmação do banco.'))return;
-  const btn=d.querySelector('#box-form-mov .btn-success');if(btn)btn.disabled=true;
-  try{
-   const r=await w.executarTransferenciaSeguraV20261009({pr,setorDestino:setor,leitoDestino:n,nome,contabilizarIndicadores:false,usuario:w.usuarioAtual?.nome||'usuario'});
-   if(!r?.ok)throw Error('Banco não confirmou transferência.');
-   w.alert('TRANSFERÊNCIA CONFIRMADA NO BANCO.\n\nLeito '+n+' ocupado pelo paciente e leito '+o.l.n+' liberado. Aguarde a sincronização e confira o painel.');
-  }catch(e){w.alert('Transferência NÃO realizada: '+(e?.message||e)+'\nNenhum outro leito deve ser liberado manualmente.');}
-  finally{if(btn)btn.disabled=false}
- };
- // O botão original possui onclick inline apontando para a função antiga.
- // Substitui o handler do botão físico pelo fluxo seguro, sem alterar outros botões.
- const execButton=d.querySelector('#box-form-mov button[onclick*="executarMovimentacaoLeito"]');
- if(!execButton)return false;
- execButton.onclick=function(event){
-   event?.preventDefault();
-   return w.executarMovimentacaoLeito();
- };
- execButton.removeAttribute('onclick');
- w.__hsjEfetivarReservaInternado20261014=true;return true;
+ if(!w||!d||!Array.isArray(w.setoresData)||typeof w.executarTransferenciaSeguraV20261009!=='function')return false;
+ if(d.__hsjCaptureEfetivarReservaV3)return true;
+ d.__hsjCaptureEfetivarReservaV3=true;
+ let busy=false;
+ d.addEventListener('click',async event=>{
+   const button=event.target?.closest?.('button');
+   if(!button||!d.getElementById('box-form-mov')?.contains(button))return;
+   if(!button.matches('.btn-success')||!String(button.getAttribute('onclick')||'').includes('executarMovimentacaoLeito')&&!button.dataset.hsjMoveAction)return;
+   const val=id=>String(d.getElementById(id)?.value||'').trim();
+   const action=val('mov-acao'),pr=val('mov-atendimento'),setor=val('mov-setor'),leito=val('mov-leito');
+   if(action!=='Admissão'||!pr||!setor||!leito)return;
+   const destino=w.setoresData.find(s=>s.nome===setor)?.leitos?.find(l=>String(l.n)===leito);
+   const origens=[];w.setoresData.forEach(s=>(s.leitos||[]).forEach(l=>{if(l.status==='ocupado'&&String(l.prontuario||'')===pr)origens.push({s,l})}));
+   if(!origens.length)return;
+   event.preventDefault();event.stopImmediatePropagation();
+   if(busy)return;
+   if(!destino||destino.status!=='reservado'||String(destino.prontuario||'')!==pr){
+     w.alert('Este paciente ja ocupa outro leito. Selecione Transferencia Interna para outro destino. Nenhuma admissao foi realizada.');return;
+   }
+   if(origens.length!==1){w.alert('Ha mais de uma ocupacao para este prontuario. Regularize antes de transferir.');return}
+   if(w.usuarioAtual?.perfil==='Visitante'){w.alert('Acesso negado.');return}
+   const origem=origens[0],nome=origem.l.paciente||val('mov-paciente');
+   const msg='EFETIVAR RESERVA COMO TRANSFERENCIA INTERNA?\\n\\nPaciente: '+nome+'\\nOrigem: '+origem.s.nome+' / '+origem.l.n+'\\nDestino: '+setor+' / '+leito+'\\n\\nAo confirmar no banco, o destino ficara ocupado e a origem sera liberada.';
+   if(!w.confirm(msg))return;
+   busy=true;button.disabled=true;
+   try{
+     const r=await w.executarTransferenciaSeguraV20261009({pr,setorDestino:setor,leitoDestino:leito,nome,contabilizarIndicadores:false,usuario:w.usuarioAtual?.nome||'usuario'});
+     if(!r?.ok)throw Error('Banco nao confirmou transferencia.');
+     w.alert('TRANSFERENCIA CONFIRMADA NO BANCO. Atualize o painel e confira os dois leitos.');
+     if(typeof w.carregarDadosDoFirebase==='function')await w.carregarDadosDoFirebase();
+   }catch(e){w.alert('TRANSFERENCIA NAO REALIZADA: '+(e?.message||e)+'\\nNao libere manualmente nenhum leito.');}
+   finally{busy=false;button.disabled=false}
+ },true);
+ // Mantem a chamada inline existente, interceptando apenas a admissao incorreta.
+ return true;
 }
-function start(){if(timer)clearInterval(timer);let n=0;timer=setInterval(()=>{if(setup()||++n>120)clearInterval(timer)},250);setup()}
+function start(){if(timer)clearInterval(timer);let attempts=0;timer=setInterval(()=>{if(init()||++attempts>160)clearInterval(timer)},250);init()}
 frame.addEventListener('load',start);start();
 })();
