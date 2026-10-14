@@ -546,6 +546,50 @@
         };
         setTimeout(function(){ window.garantirLeito15MentalFeminino(); },1800);
 
+        // Inclusão pontual e idempotente do leito 16 em MENTAL FEMININO.
+        // Não altera dados, pacientes, reservas ou status dos leitos existentes.
+        window.garantirLeito16MentalFeminino = async function() {
+            try {
+                const ref = doc(db, 'hospital', 'dados');
+                const resultado = await runTransaction(db, async function(tx) {
+                    const snap = await tx.get(ref);
+                    if (!snap.exists()) throw new Error('Banco principal não encontrado.');
+                    const dados = snap.data();
+                    const setor = (dados.setoresData || []).find(function(s) {
+                        return String(s.nome || '').trim().toUpperCase() === 'MENTAL FEMININO';
+                    });
+                    if (!setor) throw new Error('Setor MENTAL FEMININO não encontrado.');
+                    const leitos = Array.isArray(setor.leitos) ? setor.leitos : [];
+                    if (leitos.some(function(l) { return String(l.n).trim() === '16'; })) {
+                        return {ok:true, jaExistia:true};
+                    }
+                    setor.leitos = [...leitos, {n:'16', status:'disponivel', paciente:'', prontuario:''}];
+                    const agora = new Date().toISOString();
+                    const rev = Number(dados._meta && dados._meta.revision || 0) + 1;
+                    dados._meta = {...(dados._meta || {}), revision:rev, previousRevision:rev-1,
+                        updatedAt:agora, editor:(usuarioAtual && usuarioAtual.nome) || 'usuario'};
+                    tx.set(ref, dados);
+                    return {ok:true, jaExistia:false, revisao:rev};
+                });
+                const setorLocal = (setoresData || []).find(function(s) {
+                    return String(s.nome || '').trim().toUpperCase() === 'MENTAL FEMININO';
+                });
+                if (setorLocal) {
+                    setorLocal.leitos = Array.isArray(setorLocal.leitos) ? setorLocal.leitos : [];
+                    if (!setorLocal.leitos.some(function(l) { return String(l.n).trim() === '16'; })) {
+                        setorLocal.leitos.push({n:'16',status:'disponivel',paciente:'',prontuario:''});
+                    }
+                }
+                if (typeof renderizarPainelLeitos === 'function') renderizarPainelLeitos();
+                if (typeof atualizarSelectsGerais === 'function') atualizarSelectsGerais();
+                return resultado;
+            } catch (e) {
+                console.error('Falha ao incluir leito 16 em MENTAL FEMININO:', e);
+                return {ok:false, erro:String(e)};
+            }
+        };
+        setTimeout(function() { window.garantirLeito16MentalFeminino(); }, 2400);
+
         // Alteração operacional de status de leito vazio: disponível / bloqueado / higienização.
         window.executarStatusLeitoAtomico = async function(argsBrutos) {
             const args = JSON.parse(JSON.stringify(argsBrutos || {}));
