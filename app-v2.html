@@ -661,6 +661,54 @@
             return JSON.parse(JSON.stringify(resultado));
         };
 
+        // Liberação explícita, segura e persistente do leito (inclusive reserva).
+        window.liberarLeitoSelecionadoAtomico = async function(raw) {
+            const a=JSON.parse(JSON.stringify(raw||{}));
+            const ref=doc(db,'hospital','dados');
+            return runTransaction(db,async function(tx){
+                const snap=await tx.get(ref);
+                if(!snap.exists())throw new Error('Base compartilhada indisponível.');
+                const dados=JSON.parse(JSON.stringify(snap.data()));
+                const setor=(dados.setoresData||[]).find(s=>s.nome===a.setor);
+                const leito=setor?.leitos?.find(l=>String(l.n)===String(a.leito));
+                if(!leito)throw new Error('Leito não encontrado no banco.');
+                if(String(leito.prontuario||'')!==String(a.pr||'') ||
+                   !['ocupado','reservado'].includes(leito.status)){
+                    const err=new Error('Estado do leito mudou em outro computador. Atualize e confira.');
+                    err.code='CONFLITO_REAL';throw err;
+                }
+                const anterior=leito.status, paciente=leito.paciente||'';
+                if(leito.reservaPrevAlta)throw new Error('Este leito possui reserva futura vinculada. Use a operação específica para preservar a reserva.');
+                leito.status='disponivel';leito.paciente='';leito.prontuario='';
+                const agora=new Date(),iso=agora.toISOString(),pr=String(a.pr||'');
+                // Cancelar uma reserva não equivale a alta de um paciente internado.
+                if(anterior==='reservado'){
+                    const aindaInternado=(dados.setoresData||[]).some(s=>(s.leitos||[]).some(l=>l.status==='ocupado'&&String(l.prontuario||'')===pr));
+                    if(!aindaInternado && dados.basePacientesCadastrados?.[pr]){
+                        dados.basePacientesCadastrados[pr].statusInternacao='reserva_cancelada';
+                    }
+                }else if(pr&&dados.basePacientesCadastrados?.[pr]){
+                    const p=dados.basePacientesCadastrados[pr];
+                    p.statusInternacao='encerrado';p.motivoSaida='Liberação de Leito';
+                    p.dataSaida=iso;p.previsaoAlta='';
+                }
+                dados.movimentacoesHistorico=Array.isArray(dados.movimentacoesHistorico)?dados.movimentacoesHistorico:[];
+                const hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+                const data=agora.toLocaleDateString('pt-BR')+' '+hora;
+                dados.movimentacoesHistorico.unshift({
+                    data,dataIso:iso,hora,atendimento:pr,nascimento:'',paciente,
+                    setor:a.setor+' (Leito '+a.leito+')',origem:a.setor,destino:a.setor,
+                    perfil:'-',convenio:'-',acao:anterior==='reservado'?'Cancelamento de Reserva':'Liberação de Leito',
+                    contabilizarIndicadores:false,dataDesfecho:data,dataDesfechoObj:iso
+                });
+                const rev=Number(dados._meta?.revision||0)+1;
+                dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,
+                    updatedAt:iso,editor:a.usuario||'usuario',safeguards:'liberacao-atomica-v1'};
+                tx.set(ref,dados);
+                return {ok:true,status:'disponivel',anterior,revisao:rev};
+            });
+        };
+
         // Saída hospitalar atômica e restrita ao leito selecionado.
         window.executarSaidaLeitoAtomica = async function(argsBrutos) {
             const args = JSON.parse(JSON.stringify(argsBrutos || {}));
@@ -2814,6 +2862,27 @@
                         alert('Não foi possível gravar a movimentação no banco: ' + (err && err.message ? err.message : err));
                     }
                 }
+                return;
+            }
+
+            // A opção "Disponível" não pode seguir pelo salvamento legado (que é apenas local).
+            if (acao === 'Disponível') {
+                if(!setorNome||!leitoNum) {alert('Selecione o leito.');return;}
+                const sLiberar=setoresData.find(s=>s.nome===setorNome);
+                const lLiberar=sLiberar?.leitos?.find(l=>String(l.n)===String(leitoNum));
+                if(!lLiberar) {alert('Leito não localizado.');return;}
+                if(!confirm('Confirmar liberação do leito '+leitoNum+' ('+setorNome+')?'))return;
+                try{
+                    const resposta=await window.liberarLeitoSelecionadoAtomico({
+                        setor:setorNome,leito:leitoNum,pr:lLiberar.prontuario||'',
+                        usuario:(usuarioAtual&&usuarioAtual.nome)||'usuario'
+                    });
+                    if(!resposta?.ok)throw new Error('O banco não confirmou a liberação.');
+                    lLiberar.status='disponivel';lLiberar.paciente='';lLiberar.prontuario='';
+                    renderizarPainelLeitos();atualizarTabelaPacientesInternos();
+                    document.getElementById('mov-acao').selectedIndex=0;
+                    alert('Leito liberado e confirmado no banco compartilhado.');
+                }catch(e){alert('Liberação NÃO confirmada: '+(e?.message||e));}
                 return;
             }
 
