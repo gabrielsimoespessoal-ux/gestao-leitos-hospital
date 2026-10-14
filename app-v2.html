@@ -97,7 +97,7 @@
             dst.status='reservado';
             const now=new Date(),iso=now.toISOString(),data=now.toLocaleString('pt-BR');
             state.movimentacoesHistorico=Array.isArray(state.movimentacoesHistorico)?state.movimentacoesHistorico:[];
-            state.movimentacoesHistorico.unshift({data,dataIso:iso,hora:now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:pr||'-',paciente:nome,origem:a.setorOrigem+' (Leito '+a.leitoOrigem+')',destino:a.setorDestino+' (Leito '+a.leitoDestino+')',setor:a.setorOrigem+' (Leito '+a.leitoOrigem+')',acao:'Mudança de Leito Reservado',contabilizarIndicadores:false,dataDesfecho:data,dataDesfechoObj:iso});
+            if(l)state.movimentacoesHistorico.unshift({data,dataIso:iso,hora:now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:pr||'-',paciente:nome,origem:a.setorOrigem+' (Leito '+a.leitoOrigem+')',destino:a.setorDestino+' (Leito '+a.leitoDestino+')',setor:a.setorOrigem+' (Leito '+a.leitoOrigem+')',acao:'Mudança de Leito Reservado',contabilizarIndicadores:false,dataDesfecho:data,dataDesfechoObj:iso});
             const previous=Number(state._meta?.revision||0);
             state._meta={...(state._meta||{}),revision:previous+1,previousRevision:previous,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'mudanca-reserva-atomica'};
             tx.set(reference,state);
@@ -141,25 +141,46 @@
             (state.setoresData||[]).forEach(s=>(s.leitos||[]).forEach(l=>{
               if(l.status==='ocupado'&&String(l.prontuario||'')===String(a.atendimento))matches.push({s,l});
             }));
-            if(matches.length!==1)throw Error('Não foi possível confirmar um único leito ocupado pelo paciente. Nenhum dado foi modificado.');
-            const {s,l}=matches[0],oldBed=String(l.n),oldSector=s.nome;
+            if(matches.length>1)throw Error('Múltiplos leitos ocupados identificados: baixa bloqueada.');
+            if(matches.length===0&&!a.semLeito)throw Error('Paciente sem leito ocupado. Confirme a baixa administrativa sem liberação de leito.');
+            if(matches.length===1&&a.semLeito)throw Error('Paciente possui leito ocupado: atualize a tela antes de prosseguir.');
+            const s=matches[0]?.s,l=matches[0]?.l;
+            const oldBed=l?String(l.n):'',oldSector=s?.nome||'Sem leito ocupado';
             if(a.setor&&a.setor!==oldSector)throw Error('Paciente mudou de setor desde a abertura da baixa.');
             if(a.leito&&String(a.leito)!==oldBed)throw Error('Paciente mudou de leito desde a abertura da baixa.');
             const now=new Date(),iso=now.toISOString(),data=now.toLocaleString('pt-BR');
-            l.status='disponivel';l.prontuario='';l.paciente='';
-            delete l.dadosCirurgicos;
+            if(l){l.status='disponivel';l.prontuario='';l.paciente='';delete l.dadosCirurgicos;}
             list.splice(idx,1);
             state.transferenciasAtivas=list;
             state.transferenciasFinalizadas=Array.isArray(state.transferenciasFinalizadas)?state.transferenciasFinalizadas:[];
-            state.transferenciasFinalizadas.unshift({...item,statusFinal:'Finalizada / Baixada',dataFinalizacao:iso,setorOrigem:oldSector,leitoOrigem:oldBed});
+            state.transferenciasFinalizadas.unshift({...item,statusFinal:l?'Finalizada / Baixada':'Baixada administrativamente (sem leito ocupado)',dataFinalizacao:iso,setorOrigem:oldSector,leitoOrigem:oldBed});
             state.movimentacoesHistorico=Array.isArray(state.movimentacoesHistorico)?state.movimentacoesHistorico:[];
             const base=state.basePacientesCadastrados?.[a.atendimento]||{};
             state.movimentacoesHistorico.unshift({data,dataIso:iso,hora:now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:a.atendimento,atendimentoNasc:item.atendimentoNasc||'',paciente:item.paciente,setor:oldSector+' (Leito '+oldBed+')',origem:oldSector,destino:item.destino,perfil:item.perfil||'',acao:'Transferência Externa',contabilizarIndicadores:a.contabilizarIndicadores===true,dataDesfecho:data,dataDesfechoObj:iso,dataAdmissaoObj:base.dataAdmissao||iso});
-            if(state.basePacientesCadastrados?.[a.atendimento]){base.statusInternacao='finalizado';base.dataSaida=iso;base.motivoSaida='Transferência Externa'}
+            if(l&&state.basePacientesCadastrados?.[a.atendimento]){base.statusInternacao='finalizado';base.dataSaida=iso;base.motivoSaida='Transferência Externa'}
             const rev=Number(state._meta?.revision||0);
             state._meta={...(state._meta||{}),revision:rev+1,previousRevision:rev,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'baixa-transferencia-e-leito-atomica'};
             tx.set(ref,state);
-            return {ok:true,setor:oldSector,leito:oldBed,revision:rev+1};
+            return {ok:true,setor:oldSector,leito:oldBed,semLeito:!l,revision:rev+1};
+          });
+        };
+        // Atualização pontual do andamento, sem modificar leitos ou pacientes.
+        window.hsjAtualizarStatusTransferenciaAtomico=async function(raw){
+          const a=JSON.parse(JSON.stringify(raw||{}));
+          const permitidos=['Solicitação Pendente','Vaga Solicitada','Vaga Liberada','Autorizada','Aguardando liberação'];
+          if(!permitidos.includes(a.status))throw Error('Status inválido.');
+          const ref=doc(db,'hospital','dados');
+          return runTransaction(db,async tx=>{
+            const snap=await tx.get(ref);if(!snap.exists())throw Error('Banco indisponível.');
+            const state=JSON.parse(JSON.stringify(snap.data()));
+            const list=state.transferenciasAtivas||[];
+            const item=list.find(t=>String(t.atendimento)===String(a.atendimento)&&String(t.dataIso||t.data)===String(a.dataIso));
+            if(!item)throw Error('Solicitação não localizada. Atualize a página.');
+            if(String(item.status)!==String(a.statusAnterior))throw Error('Status alterado em outro computador. Atualize antes de editar.');
+            item.status=a.status;item.atualizadoEm=new Date().toISOString();
+            const rev=Number(state._meta?.revision||0);
+            state._meta={...(state._meta||{}),revision:rev+1,previousRevision:rev,updatedAt:item.atualizadoEm,editor:a.usuario||'usuario'};
+            tx.set(ref,state);return {ok:true,status:a.status};
           });
         };
         window.hsjSalvarSolicitacaoTransferenciaAtomica = async function(raw){
@@ -1364,6 +1385,8 @@
                             <option>Solicitação Pendente</option>
                             <option>Vaga Solicitada</option>
                             <option>Vaga Liberada</option>
+                            <option>Autorizada</option>
+                            <option>Aguardando liberação</option>
                         </select>
                     </div>
                     <div class="form-group">
