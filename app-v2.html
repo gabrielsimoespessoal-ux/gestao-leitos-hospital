@@ -718,13 +718,22 @@
                 const origem=origens[0];
                 if(origem.s.nome===a.setorDestino && String(origem.l.n)===String(a.leitoDestino)) throw new Error('Origem e destino são iguais.');
                 const nome=origem.l.paciente||a.nome||'';
-                origem.l.status='disponivel';origem.l.paciente='';origem.l.prontuario='';
+                const ocupacoesExtras=[],reservasExtras=[];
+                all.forEach(s=>(s.leitos||[]).forEach(l=>{
+                    if(String(l.prontuario||'')!==String(a.pr))return;
+                    if(l.status==='ocupado'&&l!==origem.l)ocupacoesExtras.push(l);
+                    if(l.status==='reservado'&&l!==destino)reservasExtras.push(l);
+                }));
+                if(ocupacoesExtras.length)throw new Error('Ocupação duplicada: regularize antes da transferência.');
+                if(reservasExtras.length>1)throw new Error('Múltiplas reservas: regularize antes da transferência.');
+                origem.l.status='disponivel';origem.l.paciente='';origem.l.prontuario='';delete origem.l.dadosCirurgicos;
+                reservasExtras.forEach(l=>{l.status='disponivel';l.paciente='';l.prontuario='';delete l.dadosCirurgicos;});
                 destino.status='ocupado';destino.paciente=nome;destino.prontuario=a.pr;
                 const hora=new Date(), iso=hora.toISOString(), data=hora.toLocaleDateString('pt-BR')+' '+hora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
                 dados.movimentacoesHistorico=Array.isArray(dados.movimentacoesHistorico)?dados.movimentacoesHistorico:[];
                 const cadastro=dados.basePacientesCadastrados?.[a.pr]||{};
                 dados.movimentacoesHistorico.unshift({data,dataIso:iso,hora:hora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:a.pr,paciente:nome,nascimento:cadastro.nascimento||'',setor:origem.s.nome+' (Leito '+origem.l.n+')',origem:origem.s.nome,destino:a.setorDestino,leitoDestino:a.leitoDestino,perfil:cadastro.perfil||'',convenio:cadastro.convenio||'',acao:'Transferência Interna',contabilizarIndicadores:a.contabilizarIndicadores!==false,altaUTI:origem.s.nome.toUpperCase().includes('UTI'),dataDesfecho:data,dataDesfechoObj:iso,dataAdmissaoObj:cadastro.dataAdmissao||iso});
-                const revision=Number(dados._meta?.revision||0)+1;dados._meta={...(dados._meta||{}),revision,previousRevision:revision-1,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'transferencia-atomica-v1'};
+                const revision=Number(dados._meta?.revision||0)+1;dados._meta={...(dados._meta||{}),revision,previousRevision:revision-1,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'transferencia-atomica-reserva-v2'};
                 tx.set(ref,dados);return {ok:true,revision};
             });
         };
@@ -2650,19 +2659,21 @@
                 var acoesAlocacao = ['Admissão','Transferência Interna','Reservado','Reserva Cirúrgica Eletiva'];
                 var somenteDisponiveis = acoesAlocacao.includes(acao) || String(acao||'').includes('Reserva');
                 var leitos = setorObj.leitos.filter(function(l) {
-                    return somenteDisponiveis ? l.status === 'disponivel' : true;
+                    return somenteDisponiveis ? (l.status === 'disponivel' || (acao === 'Transferência Interna' && !!String(document.getElementById('mov-atendimento')?.value||'').trim() && l.status === 'reservado' && String(l.prontuario||'').trim() === String(document.getElementById('mov-atendimento')?.value||'').trim())) : true;
                 });
                 if(!leitos.length) {
                     selectLeito.innerHTML = '<option value="">Nenhum leito disponível</option>';
                     return;
                 }
                 leitos.forEach(function(l) {
-                    selectLeito.innerHTML += '<option value="' + l.n + '">Leito ' + l.n + (somenteDisponiveis ? ' (disponível)' : ' (' + l.status + ')') + '</option>';
+                    selectLeito.innerHTML += '<option value="' + l.n + '">Leito ' + l.n + (l.status === 'reservado' ? ' (reservado para este paciente)' : (somenteDisponiveis ? ' (disponível)' : ' (' + l.status + ')')) + '</option>';
                 });
                 if(leitos.some(function(l){ return String(l.n)===String(valorAtual); })) selectLeito.value=valorAtual;
             }
         }
 
+        document.addEventListener('input',function(e){if(e.target?.id==='mov-atendimento' && document.getElementById('mov-acao')?.value==='Transferência Interna')atualizarSelectLeitosMov();});
+        document.addEventListener('change',function(e){if(e.target?.id==='mov-acao' && e.target.value==='Transferência Interna')atualizarSelectLeitosMov();});
         function atualizarSelectLeitosAdmin() {
             var setorNome = document.getElementById('admin-setor-alvo').value;
             var setorObj = setoresData.find(function(s) { return s.nome === setorNome; });
