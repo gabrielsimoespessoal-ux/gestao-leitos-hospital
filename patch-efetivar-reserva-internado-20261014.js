@@ -29,6 +29,15 @@ function setup(){
   }catch(e){w.alert('Transferência NÃO realizada: '+(e?.message||e)+'\nNenhum outro leito deve ser liberado manualmente.');}
   finally{if(btn)btn.disabled=false}
  };
+ // O botão original possui onclick inline apontando para a função antiga.
+ // Substitui o handler do botão físico pelo fluxo seguro, sem alterar outros botões.
+ const execButton=d.querySelector('#box-form-mov button[onclick*="executarMovimentacaoLeito"]');
+ if(!execButton)return false;
+ execButton.onclick=function(event){
+   event?.preventDefault();
+   return w.executarMovimentacaoLeito();
+ };
+ execButton.removeAttribute('onclick');
  w.__hsjEfetivarReservaInternado20261014=true;return true;
 }
 function start(){if(timer)clearInterval(timer);let n=0;timer=setInterval(()=>{if(setup()||++n>120)clearInterval(timer)},250);setup()}
