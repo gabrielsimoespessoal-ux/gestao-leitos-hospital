@@ -2397,6 +2397,20 @@
             }
         }
 
+        // Número de atendimento é opcional somente nas reservas, nunca na admissão.
+        function atualizarObrigatoriedadeProntuarioReserva() {
+            const acao=document.getElementById('mov-acao')?.value||'';
+            const input=document.getElementById('mov-atendimento');
+            if(!input)return;
+            const label=input.closest('.form-group')?.querySelector('label');
+            const reserva=['Reservado','Reserva Cirúrgica Eletiva'].includes(acao);
+            if(label)label.textContent=reserva?'Nº do Prontuário / Atendimento (opcional na reserva)':'Nº do Prontuário (Único) *';
+            input.required=!reserva;
+            input.placeholder=reserva?'Opcional — informe caso já exista':'Digite o nº e autocompleta';
+        }
+        document.addEventListener('change',function(e){if(e.target?.id==='mov-acao')atualizarObrigatoriedadeProntuarioReserva()});
+        setTimeout(atualizarObrigatoriedadeProntuarioReserva,300);
+
         function ajustarPerfilPorSetor(nomeSetor) {
             var selectPerfil = document.getElementById('mov-perfil-vaga');
             if (!selectPerfil) return;
@@ -2819,8 +2833,8 @@
 
             // FLUXO SEGURO NATIVO PARA ADMISSÃO E RESERVA.
             // Confirma no Firebase antes de alterar a interface local.
-            if (acao === 'Admissão' || acao === 'Reservado') {
-                if(!atendimento || !paciente || !nascimento || !perfilVaga || !sexo || !origem) {
+            if (acao === 'Admissão' || acao === 'Reservado' || acao === 'Reserva Cirúrgica Eletiva') {
+                if((acao === 'Admissão' && !atendimento) || !paciente || !nascimento || !perfilVaga || !sexo || !origem) {
                     alert('Atenção: Preencha todos os campos obrigatórios do paciente.');
                     return;
                 }
@@ -2828,12 +2842,28 @@
                     alert('Módulo seguro de admissão ainda não carregou. Atualize a página e tente novamente.');
                     return;
                 }
+                // Reserva cirúrgica pode ser cadastrada sem prontuário real.
+                // Um identificador técnico evita colisões no banco; não equivale a atendimento.
+                var idReservaSemPr = !atendimento && acao !== 'Admissão'
+                    ? 'RESERVA-SEM-PR-' + Date.now() + '-' + Math.random().toString(36).slice(2,8).toUpperCase()
+                    : '';
+                var identificadorRegistro = atendimento || idReservaSemPr;
+                var medicoCirurgicoSeguro = '', dataCirurgiaSegura = '', procedimentoSeguro = '';
+                if (acao === 'Reserva Cirúrgica Eletiva') {
+                    medicoCirurgicoSeguro = document.getElementById('mov-medico')?.value || '';
+                    dataCirurgiaSegura = document.getElementById('mov-data-cirurgia')?.value || '';
+                    procedimentoSeguro = document.getElementById('mov-procedimento')?.value?.trim() || '';
+                    if (!medicoCirurgicoSeguro || !dataCirurgiaSegura || !procedimentoSeguro) {
+                        alert('Informe médico, data/hora e procedimento para a reserva cirúrgica.');
+                        return;
+                    }
+                }
                 try {
                     var resultadoSeguro = await window.executarEntradaLeitoAtomica({
                         acao: acao,
                         setor: setorNome,
                         leito: leitoNum,
-                        pr: atendimento,
+                        pr: identificadorRegistro,
                         nome: paciente,
                         nasc: nascimento,
                         sexo: sexo,
@@ -2842,6 +2872,9 @@
                         precaucao: precaucao,
                         origem: origem,
                         previsaoAlta: previsaoAltaPaciente,
+                        medicoCirurgiao: medicoCirurgicoSeguro,
+                        dataHoraCirurgia: dataCirurgiaSegura,
+                        procedimentoProposto: procedimentoSeguro,
                         usuario: (usuarioAtual && usuarioAtual.nome) ? usuarioAtual.nome : 'usuario'
                     });
 
@@ -2850,10 +2883,10 @@
                     if (leitoSeguro) {
                         leitoSeguro.status = resultadoSeguro.status;
                         leitoSeguro.paciente = paciente;
-                        leitoSeguro.prontuario = atendimento;
+                        leitoSeguro.prontuario = identificadorRegistro;
                     }
-                    basePacientesCadastrados[atendimento] = {
-                        ...(basePacientesCadastrados[atendimento] || {}),
+                    basePacientesCadastrados[identificadorRegistro] = {
+                        ...(basePacientesCadastrados[identificadorRegistro] || {}),
                         nome: paciente,
                         nascimento: nascimento,
                         sexo: sexo,
@@ -2875,7 +2908,7 @@
                     if(document.getElementById('mov-previsao-alta-paciente')) document.getElementById('mov-previsao-alta-paciente').value = '';
                     document.getElementById('mov-acao').selectedIndex = 0;
 
-                    alert((acao === 'Admissão' ? 'Admissão' : 'Reserva') + ' gravada com sucesso no banco. A alteração está persistida.');
+                    alert((acao === 'Admissão' ? 'Admissão' : 'Reserva') + ' gravada com sucesso no banco. A alteração está persistida.' + (idReservaSemPr ? '\\nReserva sem número de atendimento: foi gerado um identificador interno para controle.' : ''));
                 } catch (err) {
                     console.error('Erro no fluxo seguro nativo de entrada:', err);
                     if (err && err.code === 'CONFLITO_REAL') {
