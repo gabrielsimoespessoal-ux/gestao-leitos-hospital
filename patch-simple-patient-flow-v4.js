@@ -1567,7 +1567,7 @@
               if(typeof w.executarSaidaLeitoAtomica!=='function'){
                 throw new Error('Módulo nativo de saída ainda não carregou. Atualize a página e tente novamente.');
               }
-              const resultado=await w.executarSaidaLeitoAtomica({
+              const resultado=(acao==='Disponível') ? await w.liberarLeitoSelecionadoAtomico({setor:s.nome,leito:l.n,pr:pr,usuario:w.usuarioAtual?.nome||'usuario'}) : await w.executarSaidaLeitoAtomica({
                 acao:acaoHistorico,
                 pr:pr,
                 nome:nome,
@@ -1587,7 +1587,7 @@
               }else{
                 l.status='disponivel';l.paciente='';l.prontuario='';
               }
-              if(pr&&w.basePacientesCadastrados?.[pr]){
+              if(pr&&w.basePacientesCadastrados?.[pr] && acao!=='Disponível'){
                 w.basePacientesCadastrados[pr].statusInternacao='encerrado';
                 w.basePacientesCadastrados[pr].motivoSaida=acaoHistorico;
                 w.basePacientesCadastrados[pr].dataSaida=new Date().toISOString();
