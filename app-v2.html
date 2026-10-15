@@ -183,6 +183,26 @@
             tx.set(ref,state);return {ok:true,status:a.status};
           });
         };
+        // Edição pontual e concorrente de observações, sem movimentar pacientes ou leitos.
+        window.hsjSalvarObservacoesTransferenciaAtomico=async function(raw){
+          const a=JSON.parse(JSON.stringify(raw||{}));
+          if(!a.atendimento||!a.dataIso)throw Error('Identificação da transferência incompleta.');
+          if(typeof a.observacoes!=='string'||a.observacoes.length>12000)throw Error('Texto de observações inválido ou muito longo.');
+          const ref=doc(db,'hospital','dados');
+          return runTransaction(db,async tx=>{
+            const snap=await tx.get(ref);if(!snap.exists())throw Error('Banco central indisponível.');
+            const state=JSON.parse(JSON.stringify(snap.data()));
+            const matches=(state.transferenciasAtivas||[]).filter(t=>String(t.atendimento)===String(a.atendimento)&&String(t.dataIso||t.data)===String(a.dataIso));
+            if(matches.length!==1)throw Error('Transferência não encontrada de forma única. Atualize a página.');
+            const item=matches[0];
+            if(String(item.pendencias||'')!==String(a.anterior||''))throw Error('As observações foram alteradas em outro computador. Atualize antes de salvar, para não sobrescrever informações.');
+            item.pendencias=a.observacoes;
+            item.atualizadoEm=new Date().toISOString();
+            const rev=Number(state._meta?.revision||0);
+            state._meta={...(state._meta||{}),revision:rev+1,previousRevision:rev,updatedAt:item.atualizadoEm,editor:a.usuario||'usuario',safeguards:'observacoes-transferencia-atomicas'};
+            tx.set(ref,state);return {ok:true,revision:rev+1};
+          });
+        };
         window.hsjSalvarSolicitacaoTransferenciaAtomica = async function(raw){
           const a=JSON.parse(JSON.stringify(raw||{}));
           if(!a.atendimento||!a.paciente||!a.destino)throw Error('Prontuário, paciente e destino são obrigatórios.');
