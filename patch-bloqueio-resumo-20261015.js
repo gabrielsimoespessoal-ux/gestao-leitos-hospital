@@ -21,7 +21,7 @@ function boot(){
  #hsj-fast-block button{background:#7c3aed;color:#fff;border:0;border-radius:8px;padding:11px 16px;cursor:pointer;font-weight:700}
  `;d.head.appendChild(css);
  const overview=d.createElement('section');overview.id='hsj-overview-20261015';overview.setAttribute('aria-label','Resumo geral de ocupação');
- const painel=d.getElementById('painel');painel.querySelector('.page-header')?.after(overview);
+ const painel=d.getElementById('painel');painel.appendChild(overview);
  const fmt=n=>Number(n||0).toLocaleString('pt-BR');
  function counts(list){
   const c={total:0,ocupado:0,disponivel:0,reservado:0,bloqueado:0,higienizacao:0};
