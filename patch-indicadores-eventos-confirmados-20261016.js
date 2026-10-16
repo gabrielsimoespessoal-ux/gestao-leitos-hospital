@@ -5,11 +5,11 @@ function init(){
  if(done)return;let w,d;try{w=frame.contentWindow;d=frame.contentDocument}catch(e){return}
  if(!w||!d||typeof w.executarEntradaLeitoAtomica!=='function'||typeof w.executarTransferenciaSeguraV20261009!=='function'||!d.getElementById('indicadores'))return;
  done=true;
- const choose=(label)=>w.confirm('INDICADORES HOSPITALARES\n\nDeseja computar esta '+label+' nos indicadores?\n\nOK = SIM / Cancelar = NÃO.\nA movimentação continuará normalmente em ambos os casos.');
+ const choose=(label)=>w.hsjConfirmarIndicadorSimNao('Deseja computar esta '+label+' nos indicadores hospitalares?');
  const originalEntry=w.executarEntradaLeitoAtomica;
  w.executarEntradaLeitoAtomica=async function(a){
   const b={...a};
-  if(b.acao==='Admissão'&&typeof b.contabilizarIndicadores!=='boolean')b.contabilizarIndicadores=choose('admissão');
+  if(b.acao==='Admissão'&&typeof b.contabilizarIndicadores!=='boolean')b.contabilizarIndicadores=await choose('admissão');
   return originalEntry.call(this,b);
  };
  const originalTransfer=w.executarTransferenciaSeguraV20261009;
@@ -19,7 +19,7 @@ function init(){
    const from=(w.setoresData||[]).filter(s=>(s.leitos||[]).some(l=>l.status==='ocupado'&&String(l.prontuario||'')===String(b.pr||'')));
    const src=from.length===1?from[0].nome:'';
    const fromUTI=/\buti\b/i.test(src),toUTI=/\buti\b/i.test(String(b.setorDestino||''));
-   b.contabilizarIndicadores=choose(fromUTI&&!toUTI?'transferência interna (alta da UTI)':'transferência interna');
+   b.contabilizarIndicadores=await choose(fromUTI&&!toUTI?'transferência interna (alta da UTI)':'transferência interna');
   }
   return originalTransfer.call(this,b);
  };
