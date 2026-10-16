@@ -1,0 +1,26 @@
+{
+  "id": "/gestao-leitos-hospital/",
+  "name": "Hospital São José — Gestão de Leitos",
+  "short_name": "HSJ Leitos",
+  "description": "Painel operacional de gestão e monitoramento de leitos do Hospital São José.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#07598c",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
