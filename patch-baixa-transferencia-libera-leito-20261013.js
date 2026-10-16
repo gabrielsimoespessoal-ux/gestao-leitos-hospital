@@ -30,11 +30,12 @@ function init(){
     if(!Array.isArray(data.transferenciasFinalizadas)||!data.transferenciasFinalizadas.some(t=>String(t.atendimento)===pr&&String(t.dataIso||t.data)===id))throw Error('Transferência não encontrada no histórico de finalizadas após a transação.');
     // O leito pode ter sido novamente ocupado por outra operação simultânea. A baixa é validada pelo histórico, sem sobrescrever o estado atual do leito.
     if(data.transferenciasAtivas?.some(t=>String(t.atendimento)===pr&&String(t.dataIso||t.data)===id))throw Error('Baixa ainda não confirmada na releitura.');
-    w.setoresData=data.setoresData;w.transferenciasAtivas=data.transferenciasAtivas||[];w.transferenciasFinalizadas=data.transferenciasFinalizadas||[];
+    w.setoresData=data.setoresData;w.transferenciasAtivas=data.transferenciasAtivas||[];w.transferenciasFinalizadas=data.transferenciasFinalizadas||[];w.movimentacoesHistorico=data.movimentacoesHistorico||[];
     if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
     if(typeof w.atualizarTabelasTransferencias==='function')w.atualizarTabelasTransferencias();
     if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
     if(typeof w.atualizarResumoPlantao==='function')w.atualizarResumoPlantao();
+    if(typeof w.renderizarIndicadores==='function'&&d.getElementById('indicadores')?.classList.contains('active'))w.renderizarIndicadores();
     w.alert(loc?'Transferência baixada e registrada em Finalizadas. Confira o estado atual do leito '+loc.leito+' no painel.':'Solicitação baixada administrativamente e registrada em Finalizadas. Nenhum leito foi alterado.');
   }catch(e){w.alert('Baixa não confirmada: '+(e?.message||e)+'\nConfira o Painel de Leitos antes de repetir.')}
   finally{busy=false}
