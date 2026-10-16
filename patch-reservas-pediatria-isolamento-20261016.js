@@ -42,7 +42,7 @@ function init(){
    if(!card)return;
    const pills=[...card.querySelectorAll('.leito-pill')];
    (sector.leitos||[]).forEach(bed=>{
-    const pill=pills.find(p=>String(p.textContent||'').trim()===String(bed.n));
+    const pill=pills.find(p=>String(p.firstChild?.textContent||'').trim()===String(bed.n));
     if(!pill)return;
     pill.classList.remove('hsj-reserva-masculina','hsj-reserva-feminina','hsj-pediatria','hsj-isolamento');
     pill.querySelector('.hsj-leito-mini')?.remove();
