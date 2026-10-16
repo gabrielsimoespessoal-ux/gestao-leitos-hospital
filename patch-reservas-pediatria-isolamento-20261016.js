@@ -13,7 +13,7 @@ function init(){
  #painel-setores-detalhado .leito-pill.hsj-pediatria{box-shadow:inset 0 0 0 2px #b45309!important}
  #painel-setores-detalhado .leito-pill.hsj-isolamento{outline:3px solid #dc2626!important;outline-offset:1px!important}
  #painel-setores-detalhado .leito-pill.hsj-isolamento.hsj-pediatria{outline:3px solid #dc2626!important}
- #painel-setores-detalhado .leito-pill .hsj-leito-mini{position:absolute;right:0;top:0;display:flex;gap:1px;transform:translate(2px,-5px)}
+ #painel-setores-detalhado .leito-pill .hsj-leito-mini{position:absolute;inset:0;display:block;transform:none;pointer-events:none} #painel-setores-detalhado .leito-pill .hsj-leito-mini .hsj-tag{position:absolute;top:-6px;right:-3px} #painel-setores-detalhado .leito-pill .hsj-leito-mini .hsj-tag.iso{right:auto;left:-5px}
  #painel-setores-detalhado .leito-pill{position:relative!important;overflow:visible!important}
  #painel-setores-detalhado .leito-pill .hsj-tag{font-size:9px;line-height:1;border-radius:4px;padding:3px 3px;font-weight:800;background:#f59e0b;color:#3f2205;box-shadow:0 1px 3px #0002}
  #painel-setores-detalhado .leito-pill .hsj-tag.iso{background:#b91c1c;color:white}
