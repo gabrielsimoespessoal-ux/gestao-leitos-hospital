@@ -2977,7 +2977,7 @@
                 }
                 if (!confirm('Confirmar '+acao+' de '+(leitoAlta.paciente||paciente)+' no leito '+leitoNum+' ('+setorNome+')? A liberação será registrada no banco compartilhado.')) return;
                 try {
-                    var indicadorAlta = confirm('INDICADORES HOSPITALARES: deseja computar esta saída nos indicadores? OK = sim; Cancelar = não. A saída será realizada em ambos os casos.');
+                    var indicadorAlta = await window.hsjConfirmarIndicadorSimNao('Deseja computar esta saída nos indicadores hospitalares?');
                     var saidaConfirmada = await window.executarSaidaLeitoAtomica({
                         setor:setorNome,leito:leitoNum,pr:atendimento,
                         acao:acao,nome:leitoAlta.paciente||paciente,
