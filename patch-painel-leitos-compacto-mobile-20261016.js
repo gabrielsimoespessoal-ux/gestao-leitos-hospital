@@ -75,7 +75,7 @@ function boot(){
    let visible=0;
    beds.forEach(b=>{
     const match=!query||byName||norm(b.textContent).includes(query);
-    b.style.display=match?'':'none';
+    if(match)b.style.removeProperty('display');else b.style.setProperty('display','none','important');
     if(match)visible++;
    });
    c.style.display=(!sector||sector===name)&&(!query||byName||visible>0)?'':'none';
