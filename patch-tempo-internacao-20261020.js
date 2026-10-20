@@ -42,7 +42,7 @@ function start(){
   if(!value)return null;
   if(typeof value.toDate==='function')value=value.toDate();
   else if(typeof value.seconds==='number')value=new Date(value.seconds*1000);
-  else if(typeof value==='string'&&/^\\d{2}\\/\\d{2}\\/\\d{4}/.test(value)){const m=value.match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})/);value=new Date(+m[3],+m[2]-1,+m[1]);}
+  else if(typeof value==='string'&&value.length>=10&&value.charAt(2)==='/'&&value.charAt(5)==='/'){const pieces=value.slice(0,10).split('/');value=new Date(Number(pieces[2]),Number(pieces[1])-1,Number(pieces[0]));}
   const dt=value instanceof Date?value:new Date(value);
   return Number.isFinite(dt.getTime())&&dt.getTime()<=Date.now()?dt:null;
  }
