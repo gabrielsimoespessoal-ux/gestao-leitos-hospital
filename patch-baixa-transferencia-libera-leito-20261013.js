@@ -17,7 +17,7 @@ function init(){
   if(ocupados.length>1){w.alert('Foram identificados vários leitos ocupados. Baixa bloqueada por segurança.');return}
   const loc=ocupados[0]||null;
   if(!w.confirm(loc?'Confirmar BAIXA da transferência de '+row.paciente+'?\n\nO leito '+loc.leito+' de '+loc.setor+' será liberado automaticamente.':'Paciente sem leito ocupado. Confirmar BAIXA ADMINISTRATIVA da solicitação de '+row.paciente+'?\n\nNenhum leito ou cadastro de internação será alterado.'))return;
-  const contabilizarIndicadores=loc?w.confirm('Computar a transferência concluída nos indicadores?\nOK = Sim | Cancelar = Não (a baixa prossegue).'):false;
+  const contabilizarIndicadores=loc?(typeof w.hsjConfirmarIndicadorSimNao==='function'?await w.hsjConfirmarIndicadorSimNao('Deseja registrar esta transferência externa nos indicadores hospitalares?'):w.confirm('Computar a transferência concluída nos indicadores?')):false;
   busy=true;
   try{
     const result=await w.hsjBaixarTransferenciaLiberandoLeito({atendimento:pr,dataIso:id,setor:loc?.setor||'',leito:loc?.leito||'',semLeito:!loc,contabilizarIndicadores,usuario:w.usuarioAtual?.nome||'usuario'});
