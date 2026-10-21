@@ -64,7 +64,8 @@ function fit(){
  const groups=Array.from({length:rows},(_,i)=>cards.slice(i*cols,(i+1)*cols));
  const weights=groups.map(group=>{
    const maxBeds=Math.max(1,...group.map(card=>card.querySelectorAll('.tv-bed').length));
-   return Math.max(1,Math.sqrt(maxBeds));
+   const special=group.some(card=>/SALAS OPERAT|SALAS OPERATÓRIAS|SRPA|ESPERA VIRTUAL INTERNA/i.test(card.querySelector('.tv-sector-name')?.textContent||''));
+   return Math.max(1,Math.sqrt(maxBeds))*(special?1.48:1);
  });
  const minRow=Math.min(35,available/rows);
  const remainder=Math.max(0,available-minRow*rows);
@@ -81,15 +82,23 @@ function fit(){
   const rowHeight=rowHeights[Math.floor(i/cols)];
   const sectorWidth=(width-gap*(cols-1))/cols;
   const usableWidth=Math.max(25,sectorWidth-20);
-  const usableHeight=Math.max(15,rowHeight-30);
-  // Quadrados de uma mesma dimensão, encostados, sem espaçamento entre si.
+  const sectorName=title?.textContent||'';
+  const special=/SALAS OPERAT|SRPA|ESPERA VIRTUAL INTERNA/i.test(sectorName);
+  const headerHeight=card.querySelector('.tv-sector-header')?.getBoundingClientRect().height||17;
+  const usableHeight=Math.max(15,rowHeight-headerHeight-12);
+  // Usar a largura do setor e a altura de 1-3 linhas, com quadrados unidos.
   let best={size:0,columns:1};
   for(let columns=1;columns<=items.length;columns++){
    const lines=Math.ceil(items.length/columns);
    const side=Math.floor(Math.min(usableWidth/columns,usableHeight/lines));
    if(side>best.size)best={size:side,columns};
   }
-  const side=Math.max(7,Math.min(76,best.size));
+  const side=Math.max(7,Math.min(special?94:76,best.size));
+  if(special){
+   card.style.gap='2px';
+   card.style.padding='4px 6px';
+   beds.style.overflow='hidden';
+  }
   beds.style.display='grid';
   beds.style.gridTemplateColumns='repeat('+best.columns+','+side+'px)';
   beds.style.gridAutoRows=side+'px';
@@ -107,9 +116,9 @@ function fit(){
    el.style.borderRadius='0';
    el.style.borderWidth='1px';
    el.style.letterSpacing='0';
-   el.style.fontSize=Math.max(7,Math.min(22,side*.35))+'px';
+   el.style.fontSize=Math.max(7,Math.min(22,side*(special?.30:.35)))+'px';
    el.style.lineHeight='1';
-   el.style.gap='0';el.style.position='relative';el.style.justifyContent='flex-end';el.style.paddingBottom='1px';
+   el.style.gap='0';el.style.position='relative';el.style.justifyContent='flex-end';el.style.paddingBottom='1px';if(special){el.style.overflow='hidden';const name=el.querySelector('.tv-bed-id');if(name){name.style.fontSize=Math.max(6,Math.min(15,side/(name.textContent.length>7?5.3:name.textContent.length>4?4:2.8)))+'px';name.style.maxWidth='100%';name.style.overflow='hidden';name.style.textOverflow='clip';}}
   });
   card.querySelectorAll('.tv-bed small').forEach(el=>{
    el.style.fontSize=Math.max(6,Math.min(12,side*.20))+'px';
