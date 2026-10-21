@@ -14,12 +14,12 @@ style.textContent=`
 #hsj-tv-screen button{border:1px solid #8094b2;background:#233957;color:#fff;border-radius:8px;padding:9px 13px;font-weight:700;cursor:pointer}
 #hsj-tv-screen .tv-clock{font-weight:800;font-size:19px;font-variant-numeric:tabular-nums}
 #hsj-tv-screen .tv-sectors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(0,auto);align-content:space-evenly;gap:8px;flex:1 1 auto;min-height:0}
-#hsj-tv-screen .tv-sector{border:2px solid #536880;border-radius:12px;background:#17263a;padding:9px 10px;min-height:0;display:flex;flex-direction:column;gap:5px}
+#hsj-tv-screen .tv-sector{border:2px solid #536880;border-radius:8px;background:#17263a;padding:5px 7px;min-height:0;display:flex;flex-direction:column;gap:5px}
 #hsj-tv-screen .tv-sector-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
 #hsj-tv-screen .tv-sector-name{font-weight:800;font-size:clamp(15px,1.55vw,24px)}
 #hsj-tv-screen .tv-sector-count{font-size:12px;color:#bfd0e7;white-space:nowrap}
 #hsj-tv-screen .tv-beds{display:grid;grid-template-columns:repeat(auto-fill,58px);gap:3px;align-content:start;justify-content:start}
-#hsj-tv-screen .tv-bed{aspect-ratio:1/1;min-width:0;border:2px solid #ffffff3d;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:2px;font-size:clamp(14px,1.15vw,19px);font-weight:850;letter-spacing:.2px;text-align:center}
+#hsj-tv-screen .tv-bed{aspect-ratio:1/1;min-width:0;border:2px solid #ffffff3d;border-radius:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:2px;font-size:clamp(14px,1.15vw,19px);font-weight:850;letter-spacing:.2px;text-align:center}
 #hsj-tv-screen .tv-bed small{font-size:9px;letter-spacing:0;font-weight:750}
 #hsj-tv-screen .tv-bed[data-status=ocupado]{background:#822b39;color:#fff}
 #hsj-tv-screen .tv-bed[data-status=disponivel]{background:#145f42;color:#fff}
@@ -48,28 +48,69 @@ let timer=null,last='';
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function showClock(){screen.querySelector('#hsj-tv-clock').textContent=new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
 function fit(){
- const cards=Array.from(sectorsNode.querySelectorAll('.tv-sector'));if(!cards.length)return;
- const cols=window.innerWidth>1500?3:window.innerWidth<650?1:2;
+ const cards=[...sectorsNode.querySelectorAll('.tv-sector')];
+ if(!cards.length)return;
+ const width=sectorsNode.clientWidth,height=sectorsNode.clientHeight;
+ const cols=width>=650?2:1;
+ const rows=Math.ceil(cards.length/cols);
+ const gap=6, available=Math.max(80,height-gap*(rows-1));
  sectorsNode.style.gridTemplateColumns='repeat('+cols+',minmax(0,1fr))';
- const rows=Math.ceil(cards.length/cols),gap=8;
- const cellHeight=Math.max(55,(sectorsNode.clientHeight-gap*(rows-1))/rows);
- cards.forEach(card=>{
-  const beds=card.querySelector('.tv-beds'),items=[...beds.children],head=card.querySelector('.tv-sector-header');
-  card.style.padding='7px 9px';card.style.gap='4px';
-  head.querySelector('.tv-sector-name').style.fontSize='clamp(12px,1.35vw,20px)';
-  const rect=card.getBoundingClientRect();
-  const usableWidth=Math.max(70,rect.width-22),usableHeight=Math.max(22,cellHeight-39);
-  let best={size:12,columns:1};
-  for(let n=1;n<=Math.max(1,items.length);n++){
-   const r=Math.ceil(items.length/n);
-   const side=Math.floor(Math.min((usableWidth-(n-1)*3)/n,(usableHeight-(r-1)*3)/r));
-   if(side>best.size)best={size:side,columns:n};
+ sectorsNode.style.gap=gap+'px';
+ // Distribuição proporcional: setores com mais leitos recebem mais altura.
+ const groups=Array.from({length:rows},(_,i)=>cards.slice(i*cols,(i+1)*cols));
+ const weights=groups.map(group=>{
+   const maxBeds=Math.max(1,...group.map(card=>card.querySelectorAll('.tv-bed').length));
+   return Math.max(1,Math.sqrt(maxBeds));
+ });
+ const minRow=Math.min(35,available/rows);
+ const remainder=Math.max(0,available-minRow*rows);
+ const totalWeight=weights.reduce((a,b)=>a+b,0);
+ const rowHeights=weights.map(w=>minRow+remainder*w/totalWeight);
+ sectorsNode.style.gridTemplateRows=rowHeights.map(v=>v+'px').join(' ');
+ sectorsNode.style.alignContent='start';
+ cards.forEach((card,i)=>{
+  card.style.cssText+=';height:100%;min-height:0;padding:5px 7px;gap:3px;overflow:hidden;box-sizing:border-box';
+  const title=card.querySelector('.tv-sector-name');
+  if(title)title.style.fontSize='clamp(11px,1.25vw,18px)';
+  const beds=card.querySelector('.tv-beds'),items=[...beds.children];
+  if(!items.length)return;
+  const rowHeight=rowHeights[Math.floor(i/cols)];
+  const sectorWidth=(width-gap*(cols-1))/cols;
+  const usableWidth=Math.max(25,sectorWidth-20);
+  const usableHeight=Math.max(15,rowHeight-35);
+  // Quadrados de uma mesma dimensão, encostados, sem espaçamento entre si.
+  let best={size:0,columns:1};
+  for(let columns=1;columns<=items.length;columns++){
+   const lines=Math.ceil(items.length/columns);
+   const side=Math.floor(Math.min(usableWidth/columns,usableHeight/lines));
+   if(side>best.size)best={size:side,columns};
   }
-  const size=Math.max(12,Math.min(94,best.size));
-  beds.style.gridTemplateColumns='repeat('+best.columns+','+size+'px)';
-  beds.style.gap='3px';
-  items.forEach(el=>{el.style.width=size+'px';el.style.height=size+'px';el.style.fontSize=Math.max(9,Math.min(22,size*.32))+'px';el.style.padding='1px'});
-  card.querySelectorAll('.tv-bed small').forEach(el=>el.style.fontSize=Math.max(8,Math.min(12,size*.2))+'px');
+  const side=Math.max(7,Math.min(76,best.size));
+  beds.style.display='grid';
+  beds.style.gridTemplateColumns='repeat('+best.columns+','+side+'px)';
+  beds.style.gridAutoRows=side+'px';
+  beds.style.gap='0';
+  beds.style.justifyContent='start';
+  beds.style.alignContent='start';
+  beds.style.minHeight='0';
+  items.forEach(el=>{
+   el.style.width=side+'px';
+   el.style.height=side+'px';
+   el.style.minWidth='0';
+   el.style.minHeight='0';
+   el.style.aspectRatio='1/1';
+   el.style.padding='0';
+   el.style.borderRadius='0';
+   el.style.borderWidth='1px';
+   el.style.letterSpacing='0';
+   el.style.fontSize=Math.max(7,Math.min(22,side*.35))+'px';
+   el.style.lineHeight='1';
+   el.style.gap='0';
+  });
+  card.querySelectorAll('.tv-bed small').forEach(el=>{
+   el.style.fontSize=Math.max(6,Math.min(12,side*.20))+'px';
+   el.style.lineHeight='1';
+  });
  });
 }
 function bedDetail(bed,sector,base){
