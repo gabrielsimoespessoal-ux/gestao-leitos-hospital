@@ -66,7 +66,8 @@ function fit(){
  const weights=groups.map(group=>{
    const maxBeds=Math.max(1,...group.map(card=>card.querySelectorAll('.tv-bed').length));
    const special=group.some(card=>/SALAS OPERAT|SALAS OPERATÓRIAS|SRPA|ESPERA VIRTUAL INTERNA/i.test(card.querySelector('.tv-sector-name')?.textContent||''));
-   return Math.max(1,Math.sqrt(maxBeds))*(special?1.48:1);
+   const largeWard=group.some(card=>/IRMÃ LIBÂNIA|IRMA LIBANIA|ALA A/i.test(card.querySelector('.tv-sector-name')?.textContent||''));
+   return Math.max(1,Math.sqrt(maxBeds))*(special?1.48:largeWard?1.27:1);
  });
  const minRow=Math.min(35,available/rows);
  const remainder=Math.max(0,available-minRow*rows);
@@ -85,6 +86,7 @@ function fit(){
   const usableWidth=Math.max(25,sectorWidth-20);
   const sectorName=title?.textContent||'';
   const special=/SALAS OPERAT|SRPA|ESPERA VIRTUAL INTERNA/i.test(sectorName);
+  const largeWard=/IRMÃ LIBÂNIA|IRMA LIBANIA|^ALA A$/i.test(sectorName.trim());
   const headerHeight=card.querySelector('.tv-sector-header')?.getBoundingClientRect().height||17;
   const usableHeight=Math.max(15,rowHeight-headerHeight-12);
   // Usar a largura do setor e a altura de 1-3 linhas, com quadrados unidos.
@@ -93,6 +95,18 @@ function fit(){
    const lines=Math.ceil(items.length/columns);
    const side=Math.floor(Math.min(usableWidth/columns,usableHeight/lines));
    if(side>best.size)best={size:side,columns};
+  }
+  // Os dois setores maiores ganham uma grade retangular equilibrada com mais altura.
+  if(largeWard){
+   let bestWard={score:-Infinity,size:0,columns:1};
+   for(let columns=1;columns<=items.length;columns++){
+    const lines=Math.ceil(items.length/columns);
+    const sideCandidate=Math.floor(Math.min(usableWidth/columns,usableHeight/lines));
+    const coverage=Math.min(1,(columns*sideCandidate)/usableWidth);
+    const score=sideCandidate+coverage*2-(lines===1?2:0);
+    if(score>bestWard.score)bestWard={score,size:sideCandidate,columns};
+   }
+   best=bestWard;
   }
   const side=Math.max(7,Math.min(special?94:76,best.size));
   if(special){
