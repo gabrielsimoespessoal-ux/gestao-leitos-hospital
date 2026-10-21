@@ -20,7 +20,11 @@ style.textContent=`
 #hsj-tv-screen .tv-sector-count{font-size:12px;color:#bfd0e7;white-space:nowrap}
 #hsj-tv-screen .tv-beds{display:grid;grid-template-columns:repeat(auto-fill,58px);gap:3px;align-content:start;justify-content:start}
 #hsj-tv-screen .tv-bed{aspect-ratio:1/1;min-width:0;border:2px solid #ffffff3d;border-radius:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:2px;font-size:clamp(14px,1.15vw,19px);font-weight:850;letter-spacing:.2px;text-align:center}
-#hsj-tv-screen .tv-bed small{font-size:9px;letter-spacing:0;font-weight:750}\n#hsj-tv-screen .tv-markers{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:1px;line-height:1;white-space:nowrap;pointer-events:none}\n#hsj-tv-screen .tv-sex{font-size:clamp(8px,1.15vw,15px);color:white;text-shadow:0 1px 2px #000;font-weight:900}\n#hsj-tv-screen .tv-iso{font-size:clamp(6px,.65vw,9px);color:#fff;background:#b91c1c;padding:1px;font-weight:900}\n#hsj-tv-screen .tv-bed-id{display:block;white-space:nowrap;line-height:1;font-weight:900}
+#hsj-tv-screen .tv-bed small{font-size:9px;letter-spacing:0;font-weight:750}
+#hsj-tv-screen .tv-markers{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:1px;line-height:1;white-space:nowrap;pointer-events:none}
+#hsj-tv-screen .tv-sex{font-size:clamp(8px,1.15vw,15px);color:white;text-shadow:0 1px 2px #000;font-weight:900}
+#hsj-tv-screen .tv-iso{font-size:clamp(6px,.65vw,9px);color:#fff;background:#b91c1c;padding:1px;font-weight:900}
+#hsj-tv-screen .tv-bed-id{display:block;white-space:nowrap;line-height:1;font-weight:900}
 #hsj-tv-screen .tv-bed[data-status=ocupado]{background:#822b39;color:#fff}
 #hsj-tv-screen .tv-bed[data-status=disponivel]{background:#145f42;color:#fff}
 #hsj-tv-screen .tv-bed[data-status=reservado]{background:#1a5288;color:#fff}
@@ -115,7 +119,7 @@ function fit(){
 }
 function bedDetail(bed,sector,base){
  const data=(base&&bed.prontuario!=null&&base[bed.prontuario])||{};
- const norm=x=>String(x||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();
+ const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
  const precaution=norm(data.precaucao||bed.precaucao);
  const isolated=!!precaution&&!['nenhuma','nenhuma (padrao)','padrao','nao','sem','sem precaucao'].includes(precaution)&&/isolamento|precaucao|contato|goticulas|aeross/.test(precaution);
  const gender=norm(data.sexo||bed.sexo);
@@ -128,15 +132,15 @@ function render(){
  try{
   const w=frame.contentWindow,d=frame.contentDocument;
   sectors=w?.setoresData;base=w?.basePacientesCadastrados||{};
-  if(!Array.isArray(sectors)&&d){
+  if(d){
    let bridge=d.getElementById('hsj-tv-bridge');
    if(!bridge){
     bridge=d.createElement('script');bridge.id='hsj-tv-bridge';
-    bridge.textContent="try { window.__hsjTvBridge = function(){ return {setores: (typeof setoresData !== 'undefined' ? setoresData : null), base: (typeof basePacientesCadastrados !== 'undefined' ? basePacientesCadastrados : {})}; }; } catch(e) { window.__hsjTvBridgeError=String(e); }";
+    bridge.textContent="try { window.__hsjTvBridge = function(){ return {setores: (typeof setoresData !== 'undefined' ? setoresData : window.setoresData), base: (typeof basePacientesCadastrados !== 'undefined' ? basePacientesCadastrados : window.basePacientesCadastrados)||{}}; }; } catch(e) { window.__hsjTvBridgeError=String(e); }";
     (d.head||d.documentElement).appendChild(bridge);
    }
    const state=w.__hsjTvBridge?.();
-   if(state){sectors=state.setores;base=state.base||{};}
+   if(state){if(Array.isArray(state.setores))sectors=state.setores;base=state.base||base;}
   }
  }catch(e){console.warn('Modo TV - leitura:',e);sectors=null;base={}}
  if(!Array.isArray(sectors)){sectorsNode.innerHTML='<div style="padding:20px;color:#fff">Aguardando conexão com o painel de leitos… Verifique se o painel principal já carregou.</div>';return}
