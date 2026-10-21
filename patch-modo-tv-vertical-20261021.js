@@ -85,8 +85,8 @@ function bedDetail(bed,sector,base){
 }
 function render(){
  if(!screen.classList.contains('active'))return;
- showClock();let sectors;
- try{sectors=frame.contentWindow?.setoresData}catch(_){sectors=null}
+ showClock();let sectors,base={};
+ try{sectors=frame.contentWindow?.setoresData;base=frame.contentWindow?.basePacientesCadastrados||{}}catch(_){sectors=null;base={}}
  if(!Array.isArray(sectors)){sectorsNode.innerHTML='<div style="padding:20px">Carregando dados do painel de leitos…</div>';return}
  const snapshot=JSON.stringify(sectors.map(s=>[s.nome,(s.leitos||[]).map(l=>[l.n,l.status,bedDetail(l,s,base)])]));if(snapshot===last)return;last=snapshot;
  const counts={total:0,ocupado:0,disponivel:0,reservado:0,higienizacao:0,bloqueado:0};
