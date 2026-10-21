@@ -3,7 +3,7 @@
 const frame=document.getElementById('appFrame');if(!frame)return;
 const style=document.createElement('style');
 style.textContent=`
-#hsj-tv-toggle{position:fixed;right:14px;top:12px;z-index:2147483000;background:#172b4a;color:white;border:2px solid #93c5fd;border-radius:10px;padding:10px 16px;font:700 14px system-ui;box-shadow:0 4px 18px #0005;cursor:pointer}
+#hsj-tv-toggle{position:fixed;left:14px;right:auto;top:12px;z-index:2147483000;background:#172b4a;color:white;border:2px solid #93c5fd;border-radius:10px;padding:10px 16px;font:700 14px system-ui;box-shadow:0 4px 18px #0005;cursor:pointer}
 #hsj-tv-screen{display:none;position:fixed;inset:0;z-index:2147483001;background:#090f19;color:#edf4ff;font:500 15px/1.25 system-ui,sans-serif;box-sizing:border-box;padding:clamp(8px,1vh,16px);overflow:hidden}
 #hsj-tv-screen.active{display:flex;flex-direction:column;gap:6px}
 #hsj-tv-screen *{box-sizing:border-box}
