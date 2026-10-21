@@ -86,9 +86,22 @@ function bedDetail(bed,sector,base){
 function render(){
  if(!screen.classList.contains('active'))return;
  showClock();let sectors,base={};
- try{sectors=frame.contentWindow?.setoresData;base=frame.contentWindow?.basePacientesCadastrados||{}}catch(_){sectors=null;base={}}
- if(!Array.isArray(sectors)){sectorsNode.innerHTML='<div style="padding:20px">Carregando dados do painel de leitos…</div>';return}
- const snapshot=JSON.stringify(sectors.map(s=>[s.nome,(s.leitos||[]).map(l=>[l.n,l.status,bedDetail(l,s,base)])]));if(snapshot===last)return;last=snapshot;
+ try{
+  const w=frame.contentWindow,d=frame.contentDocument;
+  sectors=w?.setoresData;base=w?.basePacientesCadastrados||{};
+  if(!Array.isArray(sectors)&&d){
+   let bridge=d.getElementById('hsj-tv-bridge');
+   if(!bridge){
+    bridge=d.createElement('script');bridge.id='hsj-tv-bridge';
+    bridge.textContent="try { window.__hsjTvBridge = function(){ return {setores: (typeof setoresData !== 'undefined' ? setoresData : null), base: (typeof basePacientesCadastrados !== 'undefined' ? basePacientesCadastrados : {})}; }; } catch(e) { window.__hsjTvBridgeError=String(e); }";
+    (d.head||d.documentElement).appendChild(bridge);
+   }
+   const state=w.__hsjTvBridge?.();
+   if(state){sectors=state.setores;base=state.base||{};}
+  }
+ }catch(e){console.warn('Modo TV - leitura:',e);sectors=null;base={}}
+ if(!Array.isArray(sectors)){sectorsNode.innerHTML='<div style="padding:20px;color:#fff">Aguardando conexão com o painel de leitos… Verifique se o painel principal já carregou.</div>';return}
+ try{const snapshot=JSON.stringify(sectors.map(s=>[s.nome,(s.leitos||[]).map(l=>[l.n,l.status,bedDetail(l,s,base)])]));if(snapshot===last)return;last=snapshot;
  const counts={total:0,ocupado:0,disponivel:0,reservado:0,higienizacao:0,bloqueado:0};
  sectorsNode.innerHTML=sectors.map(s=>{
  const beds=Array.isArray(s.leitos)?s.leitos:[];beds.forEach(l=>{counts.total++;if(Object.hasOwn(counts,l.status))counts[l.status]++});
@@ -98,6 +111,7 @@ function render(){
  const vals=[['Total',counts.total],['Ocupados',counts.ocupado],['Disponíveis',counts.disponivel],['Reservados',counts.reservado],['Higienização',counts.higienizacao],['Bloqueados',counts.bloqueado],['Ocupação',rate]];
  kpiNode.innerHTML=vals.map(([k,v])=>'<div class="tv-kpi"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
  requestAnimationFrame(fit);
+ }catch(e){console.error('Erro ao renderizar Modo TV:',e);sectorsNode.innerHTML='<div style="color:#fff;padding:20px">Falha na exibição dos leitos: '+escapeHtml(e.message||e)+'</div>';last='';}
 }
 async function exit(){screen.classList.remove('active');toggle.style.display='';clearInterval(timer);timer=null;last='';if(document.fullscreenElement===screen){try{await document.exitFullscreen()}catch(_){}}}
 toggle.addEventListener('click',()=>{toggle.style.display='none';screen.classList.add('active');render();timer=setInterval(render,3000)});
