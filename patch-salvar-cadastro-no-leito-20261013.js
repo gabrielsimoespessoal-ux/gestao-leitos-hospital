@@ -16,6 +16,24 @@ btn.onclick=async()=>{
  const sector=val('mov-setor'),number=val('mov-leito'),pr=val('mov-atendimento'),name=val('mov-paciente');
  if(!sector||!number||!pr||!name){w.alert('Para salvar, informe setor, leito, prontuário e nome.');return}
  const s=w.setoresData.find(x=>x.nome===sector),l=s?.leitos.find(x=>String(x.n)===String(number));
+ // Se a acao selecionada for Admissao, Salvar deve efetivamente movimentar o leito.
+ // Mantem a rotina atomica nativa e todas as suas validacoes de conflito.
+ if(val('mov-acao')==='Admissão'){
+   if(w.usuarioAtual?.perfil==='Visitante'){w.alert('Sem permissão para realizar admissão.');return;}
+   if(!l){w.alert('Leito não localizado. Atualize o painel antes de tentar novamente.');return;}
+   if(l.status==='ocupado'&&String(l.prontuario||'')===pr){w.alert('Este paciente já está admitido neste leito. Nenhuma nova admissão foi criada.');return;}
+   if(l.status!=='reservado'||String(l.prontuario||'')!==pr){
+     w.alert('Admissão não executada: a reserva não corresponde exatamente ao prontuário informado, ou o leito mudou de situação. Confira o atendimento e o leito antes de prosseguir. Nenhum registro foi alterado.');
+     return;
+   }
+   if(typeof w.executarMovimentacaoLeito!=='function'){w.alert('Módulo de admissão indisponível. Atualize a página.');return;}
+   if(!w.confirm('CONFIRMAR ADMISSÃO?\\n\\nPaciente: '+name+'\\nLeito: '+number+' ('+sector+')\\n\\nA reserva será convertida em ocupação no banco compartilhado.'))return;
+   btn.disabled=true;btn.textContent='Confirmando admissão...';
+   try{await w.executarMovimentacaoLeito();}
+   catch(e){w.alert('Erro durante a admissão: '+(e?.message||e));}
+   finally{btn.disabled=false;btn.textContent='Salvar alterações do paciente';}
+   return;
+ }
  if(!l||!['ocupado','reservado'].includes(l.status)||String(l.prontuario||'')!==pr){
  w.alert('Cadastro não corresponde ao paciente atual desse leito. Não é possível salvar. Atualize o painel.');return}
  if(w.usuarioAtual?.perfil==='Visitante'){w.alert('Sem permissão para editar pacientes.');return}
