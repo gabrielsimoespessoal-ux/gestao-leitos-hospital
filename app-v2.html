@@ -2977,7 +2977,27 @@
                 }
                 if (!confirm('Confirmar '+acao+' de '+(leitoAlta.paciente||paciente)+' no leito '+leitoNum+' ('+setorNome+')? A liberação será registrada no banco compartilhado.')) return;
                 try {
-                    var indicadorAlta = await window.hsjConfirmarIndicadorSimNao('Deseja computar esta saída nos indicadores hospitalares?');
+                    var indicadorAlta = await new Promise(function(resolve) {
+                        // Modal local: nao depende de scripts externos nem de carregamento do iframe.
+                        const overlay = document.createElement('div');
+                        overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.65);display:flex;align-items:center;justify-content:center;padding:16px';
+                        const modal = document.createElement('section');
+                        modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true');
+                        modal.style.cssText = 'background:#fff;color:#1e293b;max-width:460px;width:100%;padding:24px;border-radius:14px;box-shadow:0 18px 65px #0005;font-family:Arial,sans-serif';
+                        const titulo = document.createElement('h3'); titulo.textContent='Indicadores hospitalares'; titulo.style.cssText='margin:0 0 14px;font-size:20px';
+                        const pergunta = document.createElement('p'); pergunta.textContent='Deseja registrar esta alta hospitalar nos indicadores?'; pergunta.style.cssText='font-size:16px;line-height:1.45;margin:0 0 8px';
+                        const obs = document.createElement('p'); obs.textContent='SIM registra no indicador. NÃO realiza a alta sem registrar no indicador.'; obs.style.cssText='font-size:13px;color:#475569;margin:0 0 22px';
+                        const barra = document.createElement('div'); barra.style.cssText='display:flex;gap:12px;justify-content:flex-end';
+                        let terminado=false;
+                        function escolher(valor) { if(terminado)return; terminado=true;overlay.remove();resolve(valor); }
+                        for(const item of [{texto:'NÃO',valor:false,css:'background:#f1f5f9;color:#1e293b;border:1px solid #cbd5e1'},{texto:'SIM',valor:true,css:'background:#1458a3;color:white;border:1px solid #1458a3'}]){
+                            const botao=document.createElement('button');botao.type='button';botao.textContent=item.texto;
+                            botao.style.cssText='font-weight:bold;font-size:16px;padding:12px 23px;border-radius:9px;cursor:pointer;'+item.css;
+                            botao.onclick=function(){escolher(item.valor)};barra.appendChild(botao);
+                        }
+                        modal.append(titulo,pergunta,obs,barra);overlay.appendChild(modal);document.body.appendChild(overlay);
+                        barra.lastElementChild.focus();
+                    });
                     var saidaConfirmada = await window.executarSaidaLeitoAtomica({
                         setor:setorNome,leito:leitoNum,pr:atendimento,
                         acao:acao,nome:leitoAlta.paciente||paciente,
