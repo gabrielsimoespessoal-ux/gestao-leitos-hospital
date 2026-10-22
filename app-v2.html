@@ -508,6 +508,55 @@
             return JSON.parse(JSON.stringify(resultado));
         };
 
+        // Conversao estrita de reserva com identificador tecnico em admissao definitiva.
+        window.hsjConfirmarReservaComoAdmissao = async function(a) {
+          const args=JSON.parse(JSON.stringify(a||{})),real=String(args.prontuarioDefinitivo||'').trim();
+          const provis=String(args.prontuarioProvisorio||'').trim();
+          if(!real||/^RESERVA-SEM-PR-/i.test(real))throw Error('Informe o número definitivo do atendimento antes da admissão.');
+          if(!provis||!args.setor||!args.leito)throw Error('Reserva, setor ou leito não informados.');
+          const agora=new Date(),ref=doc(db,'hospital','dados');
+          const snapAntes=await getDoc(ref);
+          if(!snapAntes.exists())throw Error('Banco principal indisponível.');
+          const dadosBackup=JSON.parse(JSON.stringify(snapAntes.data()));
+          const setorB=(dadosBackup.setoresData||[]).find(s=>s.nome===args.setor);
+          const leitoB=setorB?.leitos?.find(l=>String(l.n)===String(args.leito));
+          if(!leitoB||leitoB.status!=='reservado'||String(leitoB.prontuario||'')!==provis)throw Error('Reserva não corresponde ao leito informado. Atualize a página.');
+          const stamp=agora.toISOString().replace(/[:.]/g,'-')+'-'+Math.random().toString(36).slice(2,8);
+          await setDoc(doc(db,'hospital','backup_admissao_reserva_'+stamp),{
+            ...dadosBackup,_backup_meta:{tipo:'antes_conversao_reserva_admissao',criadoEm:agora.toISOString(),setor:args.setor,leito:args.leito}
+          });
+          return runTransaction(db,async tx=>{
+            const snap=await tx.get(ref);if(!snap.exists())throw Error('Banco não encontrado.');
+            const data=JSON.parse(JSON.stringify(snap.data()));
+            const setor=(data.setoresData||[]).find(s=>s.nome===args.setor);
+            const leito=setor?.leitos?.find(l=>String(l.n)===String(args.leito));
+            if(!leito||leito.status!=='reservado'||String(leito.prontuario||'')!==provis)throw Error('A reserva foi modificada em outro computador. Nenhum leito foi alterado.');
+            if(String(leito.paciente||'').trim().toUpperCase()!==String(args.nome||'').trim().toUpperCase())throw Error('O nome cadastrado não corresponde à reserva.');
+            const conflitos=[];
+            (data.setoresData||[]).forEach(s=>(s.leitos||[]).forEach(l=>{
+              if(s.nome===args.setor&&String(l.n)===String(args.leito))return;
+              if(['ocupado','reservado'].includes(l.status)&&[provis,real].includes(String(l.prontuario||'')))conflitos.push(s.nome+' / '+l.n+' ('+l.status+')');
+            }));
+            if(conflitos.length)throw Error('Outro vínculo encontrado para o atendimento: '+conflitos.join(', ')+'. Regularize antes de admitir.');
+            const registros=data.basePacientesCadastrados||{};
+            const original=registros[provis]||{};
+            if(real!==provis&&registros[real]&&registros[real].statusInternacao==='ativo')throw Error('Prontuário definitivo já possui internação ativa.');
+            leito.status='ocupado';leito.prontuario=real;
+            registros[real]={...original,...(registros[real]||{}),nome:args.nome,nascimento:args.nascimento||original.nascimento||'',sexo:args.sexo||original.sexo||'',perfil:args.perfil||original.perfil||'',convenio:args.convenio||original.convenio||'',origem:args.origem||original.origem||'',precaucao:args.precaucao||original.precaucao||'',statusInternacao:'ativo',dataAdmissao:agora.toISOString()};
+            if(real!==provis)delete registros[provis];
+            data.basePacientesCadastrados=registros;
+            data.movimentacoesHistorico=Array.isArray(data.movimentacoesHistorico)?data.movimentacoesHistorico:[];
+            const hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+            const dataTxt=agora.toLocaleDateString('pt-BR')+' '+hora;
+            data.movimentacoesHistorico.unshift({data:dataTxt,dataIso:agora.toISOString(),hora,atendimento:real,nascimento:args.nascimento||'',paciente:args.nome,setor:args.setor+' (Leito '+args.leito+')',origem:args.origem||args.setor,destino:args.setor,acao:'Admissão',contabilizarIndicadores:args.contabilizarIndicadores===true,dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString(),dataAdmissaoObj:agora.toISOString(),identificadorReservaAnterior:provis});
+            const rev=Number(data._meta?.revision||0)+1;
+            data._meta={...(data._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),editor:args.usuario||'usuario',safeguards:'conversao-reserva-prontuario-definitivo'};
+            tx.set(ref,data);
+            tx.set(doc(db,'hospital','auditoria_admissao_reserva_'+stamp),{tipo:'conversao_reserva_admissao',criadoEm:agora.toISOString(),setor:args.setor,leito:args.leito,prontuarioNovo:real,prontuarioReserva:provis,revisao:rev,usuario:args.usuario||'usuario'});
+            return {ok:true,revisao:rev};
+          });
+        };
+
         window.adicionarLeitoAtomico = async function(setorNome, leitoNome) {
             setorNome=String(setorNome||'').trim(); leitoNome=String(leitoNome||'').trim();
             if(!setorNome||!leitoNome) throw new Error('Informe setor e leito.');
