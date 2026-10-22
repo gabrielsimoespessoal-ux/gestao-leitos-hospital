@@ -2807,7 +2807,7 @@
                 var acoesAlocacao = ['Admissão','Transferência Interna','Reservado','Reserva Cirúrgica Eletiva'];
                 var somenteDisponiveis = acoesAlocacao.includes(acao) || String(acao||'').includes('Reserva');
                 var leitos = setorObj.leitos.filter(function(l) {
-                    return somenteDisponiveis ? (l.status === 'disponivel' || (acao === 'Transferência Interna' && !!String(document.getElementById('mov-atendimento')?.value||'').trim() && l.status === 'reservado' && String(l.prontuario||'').trim() === String(document.getElementById('mov-atendimento')?.value||'').trim())) : true;
+                    return somenteDisponiveis ? (l.status === 'disponivel' || (['Transferência Interna','Admissão'].includes(acao) && !!String(document.getElementById('mov-atendimento')?.value||'').trim() && l.status === 'reservado' && String(l.prontuario||'').trim() === String(document.getElementById('mov-atendimento')?.value||'').trim())) : true;
                 });
                 if(!leitos.length) {
                     selectLeito.innerHTML = '<option value="">Nenhum leito disponível</option>';
@@ -2820,8 +2820,8 @@
             }
         }
 
-        document.addEventListener('input',function(e){if(e.target?.id==='mov-atendimento' && document.getElementById('mov-acao')?.value==='Transferência Interna')atualizarSelectLeitosMov();});
-        document.addEventListener('change',function(e){if(e.target?.id==='mov-acao' && e.target.value==='Transferência Interna')atualizarSelectLeitosMov();});
+        document.addEventListener('input',function(e){if(e.target?.id==='mov-atendimento' && ['Transferência Interna','Admissão'].includes(document.getElementById('mov-acao')?.value))atualizarSelectLeitosMov();});
+        document.addEventListener('change',function(e){if(e.target?.id==='mov-acao' && ['Transferência Interna','Admissão'].includes(e.target.value))atualizarSelectLeitosMov();});
         function atualizarSelectLeitosAdmin() {
             var setorNome = document.getElementById('admin-setor-alvo').value;
             var setorObj = setoresData.find(function(s) { return s.nome === setorNome; });
