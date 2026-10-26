@@ -16,6 +16,18 @@ function init(){
   (w.setoresData||[]).forEach(s=>(s.leitos||[]).forEach(l=>{if(l.status==='ocupado'&&String(l.prontuario||'')===pr)ocupados.push({setor:s.nome,leito:String(l.n)})}));
   if(ocupados.length>1){w.alert('Foram identificados vários leitos ocupados. Baixa bloqueada por segurança.');return}
   const loc=ocupados[0]||null;
+  if(!loc){
+    const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+    const nome=norm(row.paciente),candidatos=[];
+    (w.setoresData||[]).forEach(s=>(s.leitos||[]).forEach(l=>{
+      if(l.status==='ocupado'&&nome&&norm(l.paciente)===nome)
+        candidatos.push({setor:s.nome,leito:String(l.n),prontuario:String(l.prontuario||'')});
+    }));
+    if(candidatos.length){
+      w.alert('BAIXA NAO REALIZADA POR SEGURANCA.\nA transferencia de '+row.paciente+' tem prontuario '+(pr||'(vazio)')+', mas ha leito ocupado com mesmo nome e identificacao diferente:\n'+candidatos.map(c=>c.setor+' / Leito '+c.leito+' / Prontuario '+(c.prontuario||'(vazio)')).join('\n')+'\nConfira a identificacao antes de repetir. Nenhum leito foi alterado.');
+      return;
+    }
+  }
   if(!w.confirm(loc?'Confirmar BAIXA da transferência de '+row.paciente+'?\n\nO leito '+loc.leito+' de '+loc.setor+' será liberado automaticamente.':'Paciente sem leito ocupado. Confirmar BAIXA ADMINISTRATIVA da solicitação de '+row.paciente+'?\n\nNenhum leito ou cadastro de internação será alterado.'))return;
   const contabilizarIndicadores=loc?(typeof w.hsjConfirmarIndicadorSimNao==='function'?await w.hsjConfirmarIndicadorSimNao('Deseja registrar esta transferência externa nos indicadores hospitalares?'):w.confirm('Computar a transferência concluída nos indicadores?')):false;
   busy=true;
@@ -36,6 +48,12 @@ function init(){
     if(typeof w.atualizarTabelaPacientesInternos==='function')w.atualizarTabelaPacientesInternos();
     if(typeof w.atualizarResumoPlantao==='function')w.atualizarResumoPlantao();
     if(typeof w.renderizarIndicadores==='function'&&d.getElementById('indicadores')?.classList.contains('active'))w.renderizarIndicadores();
+    
+    const finalizadas=d.getElementById('tabela-transf-finalizadas');
+    if(finalizadas){
+      const titulo=[...d.querySelectorAll('#transferencias h3')].find(e=>e.textContent.includes('Transferências Finalizadas'));
+      (titulo||finalizadas).scrollIntoView({behavior:'smooth',block:'start'});
+    }
     w.alert(loc?'Transferência baixada e registrada em Finalizadas. Confira o estado atual do leito '+loc.leito+' no painel.':'Solicitação baixada administrativamente e registrada em Finalizadas. Nenhum leito foi alterado.');
   }catch(e){w.alert('Baixa não confirmada: '+(e?.message||e)+'\nConfira o Painel de Leitos antes de repetir.')}
   finally{busy=false}
