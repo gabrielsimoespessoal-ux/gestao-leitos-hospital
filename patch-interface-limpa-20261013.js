@@ -91,6 +91,34 @@ try{
    if(hist)hist.style.setProperty('display','inline-block','important');
  }
  setInterval(garantirConteudoVisivel,450);
+
+ // Recuperação do formulário quando regras legadas deixam os campos invisíveis.
+ const cssFix=d.createElement('style');
+ cssFix.id='hsj-drawer-visibility-20261026';
+ cssFix.textContent='#hsj-drawer-wrap[style*="flex"] #hsj-drawer-body,#hsj-drawer-wrap[style*="flex"] #box-form-mov{display:block!important;visibility:visible!important;opacity:1!important;content-visibility:visible!important;min-height:180px!important;height:auto!important;max-height:none!important;overflow:visible!important}#hsj-drawer-wrap[style*="flex"] #box-form-mov>.form-grid{display:grid!important;visibility:visible!important;opacity:1!important}#hsj-drawer-wrap[style*="flex"] #box-form-mov>h3{display:block!important;visibility:visible!important}#hsj-drawer-wrap[style*="flex"] #box-form-mov .form-grid>.form-group{display:block!important;visibility:visible!important;opacity:1!important}#hsj-drawer-wrap[style*="flex"] #box-form-mov .form-group label,#hsj-drawer-wrap[style*="flex"] #box-form-mov .form-group input:not([type="hidden"]),#hsj-drawer-wrap[style*="flex"] #box-form-mov .form-group select{visibility:visible!important;opacity:1!important}';
+ d.head.appendChild(cssFix);
+ function checarJanela(){
+   if(wrap.style.display!=='flex')return;
+   const body=d.getElementById('hsj-drawer-body'),f=d.getElementById('box-form-mov');
+   if(!body||!f)return;
+   if(f.parentElement!==body)body.appendChild(f);
+   const setor=d.getElementById('mov-setor'),leito=d.getElementById('mov-leito');
+   const campos=[setor,leito,d.getElementById('mov-acao')].filter(Boolean);
+   const visiveis=campos.filter(e=>e.getClientRects().length&&e.getBoundingClientRect().height>8&&w.getComputedStyle(e).visibility!=='hidden');
+   let aviso=d.getElementById('hsj-drawer-erro-visual');
+   if(visiveis.length===campos.length&&campos.length===3){if(aviso)aviso.remove();return;}
+   if(!aviso){
+     aviso=d.createElement('div');aviso.id='hsj-drawer-erro-visual';
+     aviso.style.cssText='display:block!important;background:#fff7ed;color:#9a3412;padding:14px;border:1px solid #fdba74;border-radius:8px;margin:12px 0;position:relative;z-index:10';
+     aviso.textContent='O formulário de movimentação não carregou corretamente. Nenhuma alteração foi feita no leito. Feche e atualize o aplicativo.';
+     body.prepend(aviso);
+   }
+   f.style.setProperty('display','block','important');
+   f.style.setProperty('content-visibility','visible','important');
+   f.style.setProperty('visibility','visible','important');
+   const grid=f.querySelector('.form-grid');if(grid)grid.style.setProperty('display','grid','important');
+ }
+ setInterval(checarJanela,700);
  // Repara também quando outro script altera o conteúdo sem modificar o estilo da janela.
  const observerConteudo=new MutationObserver(()=>{if(wrap.style.display==='flex')garantirConteudoVisivel();});
  observerConteudo.observe(d.body,{childList:true,subtree:false});
