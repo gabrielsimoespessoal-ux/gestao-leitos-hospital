@@ -52,10 +52,11 @@ button.addEventListener('click',async()=>{
   if(snap.metadata?.fromCache)throw Error('Sem confirmação do servidor. Nenhuma gravação efetuada.');
   const atual=String(snap.data()?.texto||'');
   if(atual!==remoteText){setStatus('Conflito: outro computador alterou as observações. Copie seu texto antes de atualizar.');return}
-  const stamp=new Date().toISOString();
-  await fm.setDoc(ref,{texto,atualizadoEm:stamp,editor:w.usuarioAtual?.nome||'Equipe NIR'},{merge:true});
-  remoteText=texto;remoteVersion=stamp;changed=input.value!==texto;
-  setStatus('Salvo e sincronizado às '+new Date(stamp).toLocaleTimeString('pt-BR'));
+  if(typeof w.hsjSalvarObservacoesTv!=='function')throw Error('Módulo de gravação não carregado. Atualize a página.');
+  const resposta=await w.hsjSalvarObservacoesTv(texto,remoteText,w.usuarioAtual?.nome||'Equipe NIR');
+  if(!resposta?.ok)throw Error('Banco não confirmou o salvamento.');
+  remoteText=texto;remoteVersion=resposta.atualizadoEm;changed=input.value!==texto;
+  setStatus('Salvo e sincronizado às '+new Date(resposta.atualizadoEm).toLocaleTimeString('pt-BR'));
  }catch(e){setStatus('Não foi possível salvar: '+(e?.message||e))}
  finally{busy=false;button.disabled=false}
 });
