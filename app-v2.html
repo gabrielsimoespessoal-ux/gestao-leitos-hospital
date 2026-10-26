@@ -37,7 +37,7 @@
             const snap=await tx.get(refObs);
             const atual=String(snap.exists()?(snap.data()?.texto??''):'');
             if(atual!==textoAnterior)throw Error('Outro computador modificou as observações. Copie seu texto antes de atualizar.');
-            tx.set(refObs,{texto:novoTexto,atualizadoEm,editor:nomeEditor});
+            tx.set(refObs,JSON.parse(JSON.stringify({texto:novoTexto,atualizadoEm,editor:nomeEditor})));
           });
           return {ok:true,atualizadoEm};
         };
