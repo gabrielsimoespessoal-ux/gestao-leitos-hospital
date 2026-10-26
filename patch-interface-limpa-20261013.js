@@ -182,6 +182,45 @@ try{
    setTimeout(garantirConteudoVisivel,80);
    setTimeout(garantirConteudoVisivel,350);
  };
+
+ // Ações de gerenciamento: contexto por status e remoção de duplicidades de interface.
+ function organizarAcoes(){
+   const body=d.getElementById('hsj-drawer-body'),form=d.getElementById('box-form-mov');
+   if(!body||!form)return;
+   const setor=d.getElementById('mov-setor')?.value;
+   const numero=d.getElementById('mov-leito')?.value;
+   const leito=w.setoresData?.find(s=>s.nome===setor)?.leitos?.find(l=>String(l.n)===String(numero));
+   const status=leito?.status||'';
+   const salvar=d.getElementById('hsj-save-patient-drawer');
+   const reserva=d.getElementById('hsj-confirmar-reserva-admissao');
+   if(salvar){
+      const autorizado=['ocupado','reservado'].includes(status);
+      salvar.style.setProperty('display',autorizado?'inline-block':'none','important');
+      salvar.title=autorizado?'Atualiza somente cadastro já vinculado ao leito':'Disponível apenas para leitos ocupados ou reservados';
+   }
+   if(reserva){
+      const pode=status==='reservado'&&/^RESERVA-SEM-PR-/i.test(String(leito?.prontuario||''));
+      reserva.style.setProperty('display',pode?'inline-block':'none','important');
+   }
+   const existentes=new Set();
+   [...body.querySelectorAll('button')].forEach(b=>{
+      const label=(b.textContent||'').trim().replace(/^[↗\\s]+/,'').toLowerCase();
+      if(label==='ver histórico do leito'||label==='encaminhar para transferências'){
+        if(existentes.has(label))b.style.setProperty('display','none','important');
+        else{existentes.add(label);b.style.removeProperty('display');}
+      }
+   });
+   let info=d.getElementById('hsj-salvamento-orientacao');
+   if(!info){info=d.createElement('p');info.id='hsj-salvamento-orientacao';info.style.cssText='font-size:13px;color:#075985;background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:10px;margin:0 0 12px';form.prepend(info);}
+   const ac=d.getElementById('mov-acao')?.value||'';
+   info.textContent=status==='disponivel'&&ac==='Admissão'
+     ? 'Leito disponível: para cadastrar e ocupar este leito, utilize Salvar / Executar. O botão Salvar alterações do paciente serve apenas para cadastros de leitos já ocupados ou reservados.'
+     : status==='reservado'?'Leito reservado: confirme os dados e use a rotina correspondente à sua reserva.':'Selecione a ação operacional e utilize Salvar / Executar para registrar a movimentação.';
+ }
+ const oldOrganizarOpen=w.abrirHistoricoPacienteLeito;
+ w.abrirHistoricoPacienteLeito=function(){const ret=oldOrganizarOpen.apply(this,arguments);organizarAcoes();return ret};
+ d.getElementById('mov-acao')?.addEventListener('change',organizarAcoes);
+ setInterval(()=>{if(wrap.style.display==='flex')organizarAcoes()},1500);
  // Bloqueio/alta/transferência usam as funções nativas e protegidas já instaladas.
  const transfer=d.getElementById('transferencias'),tbody=d.getElementById('tabela-transf-ativas');
  if(transfer&&tbody){
