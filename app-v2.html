@@ -24,6 +24,24 @@
         const db = getFirestore(app);
         window.db = db;
         window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction };
+        // Salva observações do Modo TV dentro do contexto do próprio Firebase.
+        // Evita objetos de outro frame e faz comparação atômica para não sobrescrever colegas.
+        window.hsjSalvarObservacoesTv = async function(texto, esperado, editor) {
+          const refObs=doc(db,'hospital','observacoes_plantao_tv');
+          const novoTexto=String(texto??'');
+          const textoAnterior=String(esperado??'');
+          if(novoTexto.length>12000)throw Error('Observações excedem o limite de 12.000 caracteres.');
+          const nomeEditor=String(editor||'Equipe NIR').slice(0,120);
+          const atualizadoEm=new Date().toISOString();
+          await runTransaction(db,async tx=>{
+            const snap=await tx.get(refObs);
+            const atual=String(snap.exists()?(snap.data()?.texto??''):'');
+            if(atual!==textoAnterior)throw Error('Outro computador modificou as observações. Copie seu texto antes de atualizar.');
+            tx.set(refObs,{texto:novoTexto,atualizadoEm,editor:nomeEditor});
+          });
+          return {ok:true,atualizadoEm};
+        };
+
 
         // Catálogo independente: não altera o documento principal de pacientes/leitos.
         window.hsjAdicionarMedicoCatalogo = async function(nomeBruto) {
