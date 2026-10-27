@@ -1,5 +1,5 @@
 (()=>{const frame=document.getElementById('appFrame');if(!frame)return;
-const TYPES=['Admissão','Alta para casa (melhorada)','Óbito','Alta para o internamento','Alta a pedido','Alta por transferência','Alta com assistência domiciliar','Evasão'];
+const TYPES=['Admissão','Alta para casa (melhorada)','Óbito','Alta para o internamento','Alta a pedido','Alta por transferência','Alta com assistência domiciliar','Evasão','Cirurgias suspensas'];
 function install(){let w,d;try{w=frame.contentWindow;d=frame.contentDocument}catch{return}if(!w||!d||!w.executarEntradaLeitoAtomica||!w.hsjConfirmarReservaComoAdmissao||!w.executarTransferenciaSeguraV20261009||!w.executarSaidaLeitoAtomica)return;if(w.__hsjIndicadoresObrigatorios20261027)return;w.__hsjIndicadoresObrigatorios20261027=true;
 w.hsjEscolherIndicadorMovimentacao=function(contexto){
  return new Promise(resolve=>{
