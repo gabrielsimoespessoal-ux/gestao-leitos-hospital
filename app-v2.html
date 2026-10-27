@@ -174,7 +174,7 @@
             state.transferenciasFinalizadas.unshift({...item,statusFinal:l?'Finalizada / Baixada':'Baixada administrativamente (sem leito ocupado)',dataFinalizacao:iso,setorOrigem:oldSector,leitoOrigem:oldBed});
             state.movimentacoesHistorico=Array.isArray(state.movimentacoesHistorico)?state.movimentacoesHistorico:[];
             const base=state.basePacientesCadastrados?.[a.atendimento]||{};
-            state.movimentacoesHistorico.unshift({data,dataIso:iso,hora:now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:a.atendimento,atendimentoNasc:item.atendimentoNasc||'',paciente:item.paciente,setor:oldSector+' (Leito '+oldBed+')',origem:oldSector,destino:item.destino,perfil:item.perfil||'',acao:'Transferência Externa',contabilizarIndicadores:a.contabilizarIndicadores===true,dataDesfecho:data,dataDesfechoObj:iso,dataAdmissaoObj:base.dataAdmissao||iso});
+            state.movimentacoesHistorico.unshift({data,dataIso:iso,hora:now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:a.atendimento,atendimentoNasc:item.atendimentoNasc||'',paciente:item.paciente,setor:oldSector+' (Leito '+oldBed+')',origem:oldSector,destino:item.destino,perfil:item.perfil||'',acao:'Transferência Externa',contabilizarIndicadores:a.contabilizarIndicadores===true,tipoIndicador:a.tipoIndicador||null,dataDesfecho:data,dataDesfechoObj:iso,dataAdmissaoObj:base.dataAdmissao||iso});
             if(l&&state.basePacientesCadastrados?.[a.atendimento]){base.statusInternacao='finalizado';base.dataSaida=iso;base.motivoSaida='Transferência Externa'}
             const rev=Number(state._meta?.revision||0);
             state._meta={...(state._meta||{}),revision:rev+1,previousRevision:rev,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'baixa-transferencia-e-leito-atomica'};
@@ -357,7 +357,7 @@
                     destino: args.setor,
                     perfil: (args.perfil || '-') + (args.sexo ? ' (' + args.sexo + ')' : ''),
                     convenio: args.convenio || '-',
-                    contabilizarIndicadores:args.contabilizarIndicadores!==false,
+                    contabilizarIndicadores:args.contabilizarIndicadores!==false,tipoIndicador:args.tipoIndicador||null,
                     acao: 'Admissão',
                     dataDesfecho: dataTxt,
                     dataDesfechoObj: agora.toISOString(),
@@ -508,7 +508,7 @@
                     setor:args.setor+' (Leito '+args.leito+')',
                     origem:args.origem||args.setor,destino:args.setor,
                     perfil:(args.perfil||'-')+(args.sexo?' ('+args.sexo+')':''),
-                    convenio:args.convenio||'-',acao:args.acao,contabilizarIndicadores:args.contabilizarIndicadores!==false,
+                    convenio:args.convenio||'-',acao:args.acao,contabilizarIndicadores:args.contabilizarIndicadores!==false,tipoIndicador:args.tipoIndicador||null,
                     dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString(),
                     dataAdmissaoObj:statusDestino==='ocupado'?agora.toISOString():(dados.basePacientesCadastrados[args.pr]?.dataAdmissao||agora.toISOString())
                 });
@@ -566,7 +566,7 @@
             data.movimentacoesHistorico=Array.isArray(data.movimentacoesHistorico)?data.movimentacoesHistorico:[];
             const hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
             const dataTxt=agora.toLocaleDateString('pt-BR')+' '+hora;
-            data.movimentacoesHistorico.unshift({data:dataTxt,dataIso:agora.toISOString(),hora,atendimento:real,nascimento:args.nascimento||'',paciente:args.nome,setor:args.setor+' (Leito '+args.leito+')',origem:args.origem||args.setor,destino:args.setor,acao:'Admissão',contabilizarIndicadores:args.contabilizarIndicadores===true,dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString(),dataAdmissaoObj:agora.toISOString(),identificadorReservaAnterior:provis});
+            data.movimentacoesHistorico.unshift({data:dataTxt,dataIso:agora.toISOString(),hora,atendimento:real,nascimento:args.nascimento||'',paciente:args.nome,setor:args.setor+' (Leito '+args.leito+')',origem:args.origem||args.setor,destino:args.setor,acao:'Admissão',contabilizarIndicadores:args.contabilizarIndicadores===true,tipoIndicador:args.tipoIndicador||null,dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString(),dataAdmissaoObj:agora.toISOString(),identificadorReservaAnterior:provis});
             const rev=Number(data._meta?.revision||0)+1;
             data._meta={...(data._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),editor:args.usuario||'usuario',safeguards:'conversao-reserva-prontuario-definitivo'};
             tx.set(ref,data);
@@ -883,7 +883,7 @@
                     setor:args.setor+' (Leito '+args.leito+')',
                     origem:args.origem||args.setor,destino:args.setor,
                     perfil:(args.perfil||'-')+(args.sexo?' ('+args.sexo+')':''),
-                    convenio:args.convenio||'-',acao:args.acao,contabilizarIndicadores:args.contabilizarIndicadores!==false,
+                    convenio:args.convenio||'-',acao:args.acao,contabilizarIndicadores:args.contabilizarIndicadores!==false,tipoIndicador:args.tipoIndicador||null,
                     dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString()
                 });
 
@@ -932,7 +932,7 @@
                 const hora=new Date(), iso=hora.toISOString(), data=hora.toLocaleDateString('pt-BR')+' '+hora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
                 dados.movimentacoesHistorico=Array.isArray(dados.movimentacoesHistorico)?dados.movimentacoesHistorico:[];
                 const cadastro=dados.basePacientesCadastrados?.[a.pr]||{};
-                dados.movimentacoesHistorico.unshift({data,dataIso:iso,hora:hora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:a.pr,paciente:nome,nascimento:cadastro.nascimento||'',setor:origem.s.nome+' (Leito '+origem.l.n+')',origem:origem.s.nome,destino:a.setorDestino,leitoDestino:a.leitoDestino,perfil:cadastro.perfil||'',convenio:cadastro.convenio||'',acao:'Transferência Interna',contabilizarIndicadores:a.contabilizarIndicadores!==false,altaUTI:origem.s.nome.toUpperCase().includes('UTI'),dataDesfecho:data,dataDesfechoObj:iso,dataAdmissaoObj:cadastro.dataAdmissao||iso});
+                dados.movimentacoesHistorico.unshift({data,dataIso:iso,hora:hora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),atendimento:a.pr,paciente:nome,nascimento:cadastro.nascimento||'',setor:origem.s.nome+' (Leito '+origem.l.n+')',origem:origem.s.nome,destino:a.setorDestino,leitoDestino:a.leitoDestino,perfil:cadastro.perfil||'',convenio:cadastro.convenio||'',acao:'Transferência Interna',contabilizarIndicadores:a.contabilizarIndicadores!==false,tipoIndicador:a.tipoIndicador||null,altaUTI:origem.s.nome.toUpperCase().includes('UTI'),dataDesfecho:data,dataDesfechoObj:iso,dataAdmissaoObj:cadastro.dataAdmissao||iso});
                 const revision=Number(dados._meta?.revision||0)+1;dados._meta={...(dados._meta||{}),revision,previousRevision:revision-1,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'transferencia-atomica-reserva-v2'};
                 tx.set(ref,dados);return {ok:true,revision};
             });
@@ -3044,33 +3044,15 @@
                 }
                 if (!confirm('Confirmar '+acao+' de '+(leitoAlta.paciente||paciente)+' no leito '+leitoNum+' ('+setorNome+')? A liberação será registrada no banco compartilhado.')) return;
                 try {
-                    var indicadorAlta = await new Promise(function(resolve) {
-                        // Modal local: nao depende de scripts externos nem de carregamento do iframe.
-                        const overlay = document.createElement('div');
-                        overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.65);display:flex;align-items:center;justify-content:center;padding:16px';
-                        const modal = document.createElement('section');
-                        modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true');
-                        modal.style.cssText = 'background:#fff;color:#1e293b;max-width:460px;width:100%;padding:24px;border-radius:14px;box-shadow:0 18px 65px #0005;font-family:Arial,sans-serif';
-                        const titulo = document.createElement('h3'); titulo.textContent='Indicadores hospitalares'; titulo.style.cssText='margin:0 0 14px;font-size:20px';
-                        const pergunta = document.createElement('p'); pergunta.textContent='Deseja registrar esta alta hospitalar nos indicadores?'; pergunta.style.cssText='font-size:16px;line-height:1.45;margin:0 0 8px';
-                        const obs = document.createElement('p'); obs.textContent='SIM registra no indicador. NÃO realiza a alta sem registrar no indicador.'; obs.style.cssText='font-size:13px;color:#475569;margin:0 0 22px';
-                        const barra = document.createElement('div'); barra.style.cssText='display:flex;gap:12px;justify-content:flex-end';
-                        let terminado=false;
-                        function escolher(valor) { if(terminado)return; terminado=true;overlay.remove();resolve(valor); }
-                        for(const item of [{texto:'NÃO',valor:false,css:'background:#f1f5f9;color:#1e293b;border:1px solid #cbd5e1'},{texto:'SIM',valor:true,css:'background:#1458a3;color:white;border:1px solid #1458a3'}]){
-                            const botao=document.createElement('button');botao.type='button';botao.textContent=item.texto;
-                            botao.style.cssText='font-weight:bold;font-size:16px;padding:12px 23px;border-radius:9px;cursor:pointer;'+item.css;
-                            botao.onclick=function(){escolher(item.valor)};barra.appendChild(botao);
-                        }
-                        modal.append(titulo,pergunta,obs,barra);overlay.appendChild(modal);document.body.appendChild(overlay);
-                        barra.lastElementChild.focus();
-                    });
+                    var selecaoAlta = await window.hsjEscolherIndicadorMovimentacao(acao+' - '+setorNome);
+                    if(!selecaoAlta)return;
+                    var indicadorAlta = selecaoAlta.contabilizarIndicadores;
                     var saidaConfirmada = await window.executarSaidaLeitoAtomica({
                         setor:setorNome,leito:leitoNum,pr:atendimento,
                         acao:acao,nome:leitoAlta.paciente||paciente,
                         nasc:nascimento||'',sexo:sexo||'',perfil:perfilVaga||'',
                         convenio:convenio||'',origem:origem||setorNome,
-                        contabilizarIndicadores:indicadorAlta,
+                        contabilizarIndicadores:indicadorAlta,tipoIndicador:selecaoAlta.tipoIndicador,
                         usuario:(usuarioAtual&&usuarioAtual.nome)||'usuario'
                     });
                     if(!saidaConfirmada || !saidaConfirmada.ok)throw new Error('Banco não confirmou a alta.');
