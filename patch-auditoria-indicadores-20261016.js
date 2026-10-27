@@ -16,14 +16,15 @@ function init(){
    if(m.contabilizarIndicadores===false)continue;
    const dt=dateOf(m);if(!dt){counts.missing++;continue}if(dt<from||dt>to)continue;
    const a=norm(m.acao),src=m.origem||m.setor||'',dest=m.destino||'';
+   const tipo=norm(m.tipoIndicador||'');
    const srcMatch=!sector||norm(m.setor).startsWith(norm(sector.nome))||norm(src)===norm(sector.nome);
    const destMatch=!sector||norm(dest)===norm(sector.nome);
    if(!srcMatch&&!destMatch)continue;
    if(m.contabilizarIndicadores!==true)counts.legacy++;
-   if(a==='admissao'&&destMatch)counts.adm++;
-   else if(a==='alta hospitalar'||a==='alta a pedido'){if(srcMatch)counts.alta++}
-   else if(a.includes('obito')){if(srcMatch)counts.ob++}
-   else if(a.includes('evasao')){if(srcMatch)counts.ev++}
+   if((tipo==='admissao'||(!tipo&&a==='admissao'))&&destMatch)counts.adm++;
+   else if((tipo&&['alta para casa (melhorada)','alta a pedido','alta com assistencia domiciliar'].includes(tipo))||(!tipo&&(a==='alta hospitalar'||a==='alta a pedido'))){if(srcMatch)counts.alta++}
+   else if(tipo==='obito'||(!tipo&&a.includes('obito'))){if(srcMatch)counts.ob++}
+   else if(tipo==='evasao'||(!tipo&&a.includes('evasao'))){if(srcMatch)counts.ev++}
    else if(a.includes('transferencia externa')){if(srcMatch)counts.ext++}
    else if(a.includes('transferencia interna')){
     if(srcMatch)counts.int++;
