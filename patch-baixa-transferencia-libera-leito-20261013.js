@@ -29,10 +29,13 @@ function init(){
     }
   }
   if(!w.confirm(loc?'Confirmar BAIXA da transferência de '+row.paciente+'?\n\nO leito '+loc.leito+' de '+loc.setor+' será liberado automaticamente.':'Paciente sem leito ocupado. Confirmar BAIXA ADMINISTRATIVA da solicitação de '+row.paciente+'?\n\nNenhum leito ou cadastro de internação será alterado.'))return;
-  const contabilizarIndicadores=loc?(typeof w.hsjConfirmarIndicadorSimNao==='function'?await w.hsjConfirmarIndicadorSimNao('Deseja registrar esta transferência externa nos indicadores hospitalares?'):w.confirm('Computar a transferência concluída nos indicadores?')):false;
+  const escolhaIndicador=await w.hsjEscolherIndicadorMovimentacao(loc?'Baixa de transferência externa':'Baixa administrativa de transferência');
+  if(!escolhaIndicador)return;
+  const contabilizarIndicadores=loc?escolhaIndicador.contabilizarIndicadores:false;
+  const tipoIndicador=loc?escolhaIndicador.tipoIndicador:null;
   busy=true;
   try{
-    const result=await w.hsjBaixarTransferenciaLiberandoLeito({atendimento:pr,dataIso:id,setor:loc?.setor||'',leito:loc?.leito||'',semLeito:!loc,contabilizarIndicadores,usuario:w.usuarioAtual?.nome||'usuario'});
+    const result=await w.hsjBaixarTransferenciaLiberandoLeito({atendimento:pr,dataIso:id,setor:loc?.setor||'',leito:loc?.leito||'',semLeito:!loc,contabilizarIndicadores,tipoIndicador,usuario:w.usuarioAtual?.nome||'usuario'});
     if(!result?.ok)throw Error('Gravação não confirmada.');
     const {doc,getDoc}=w.firebaseModules;
     const snap=await getDoc(doc(w.db,'hospital','dados'));
