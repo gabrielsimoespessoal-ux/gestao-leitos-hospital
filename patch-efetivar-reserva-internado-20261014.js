@@ -29,7 +29,7 @@ function init(){
    if(!w.confirm(msg))return;
    busy=true;button.disabled=true;
    try{
-     const r=await w.executarTransferenciaSeguraV20261009({pr,setorDestino:setor,leitoDestino:leito,nome,contabilizarIndicadores:false,usuario:w.usuarioAtual?.nome||'usuario'});
+     const r=await w.executarTransferenciaSeguraV20261009({pr,setorDestino:setor,leitoDestino:leito,nome,usuario:w.usuarioAtual?.nome||'usuario'});
      if(!r?.ok)throw Error('Banco nao confirmou transferencia.');
      w.alert('TRANSFERENCIA CONFIRMADA NO BANCO. Atualize o painel e confira os dois leitos.');
      if(typeof w.carregarDadosDoFirebase==='function')await w.carregarDadosDoFirebase();
