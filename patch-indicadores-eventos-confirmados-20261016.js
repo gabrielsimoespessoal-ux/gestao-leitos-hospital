@@ -5,24 +5,6 @@ function init(){
  if(done)return;let w,d;try{w=frame.contentWindow;d=frame.contentDocument}catch(e){return}
  if(!w||!d||typeof w.executarEntradaLeitoAtomica!=='function'||typeof w.executarTransferenciaSeguraV20261009!=='function'||!d.getElementById('indicadores'))return;
  done=true;
- const choose=(label)=>w.hsjConfirmarIndicadorSimNao('Deseja computar esta '+label+' nos indicadores hospitalares?');
- const originalEntry=w.executarEntradaLeitoAtomica;
- w.executarEntradaLeitoAtomica=async function(a){
-  const b={...a};
-  if(b.acao==='Admissão'&&typeof b.contabilizarIndicadores!=='boolean')b.contabilizarIndicadores=await choose('admissão');
-  return originalEntry.call(this,b);
- };
- const originalTransfer=w.executarTransferenciaSeguraV20261009;
- w.executarTransferenciaSeguraV20261009=async function(a){
-  const b={...a};
-  if(typeof b.contabilizarIndicadores!=='boolean'){
-   const from=(w.setoresData||[]).filter(s=>(s.leitos||[]).some(l=>l.status==='ocupado'&&String(l.prontuario||'')===String(b.pr||'')));
-   const src=from.length===1?from[0].nome:'';
-   const fromUTI=/\buti\b/i.test(src),toUTI=/\buti\b/i.test(String(b.setorDestino||''));
-   b.contabilizarIndicadores=await choose(fromUTI&&!toUTI?'transferência interna (alta da UTI)':'transferência interna');
-  }
-  return originalTransfer.call(this,b);
- };
  const style=d.createElement('style');style.textContent='#hsj-indicadores-auditaveis{border:1px solid #cbd5e1;background:#fff;border-radius:12px;padding:16px;margin:14px 0}#hsj-indicadores-auditaveis .hsj-kpis-eventos{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}#hsj-indicadores-auditaveis .hsj-evento{background:#f7fafc;border:1px solid #dfe7f0;border-radius:9px;padding:12px}#hsj-indicadores-auditaveis .hsj-evento strong{font-size:25px;display:block;color:#0f456f}#hsj-indicadores-auditaveis .hsj-evento small{display:block;color:#475569}';d.head.appendChild(style);
  const fmt=v=>Number(v||0).toLocaleString('pt-BR');
  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
