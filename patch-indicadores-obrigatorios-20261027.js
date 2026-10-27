@@ -9,7 +9,7 @@ w.hsjEscolherIndicadorMovimentacao=function(contexto){
   const p=d.createElement('p');p.textContent='Deseja computar esta movimentação nos indicadores?';p.style.margin='8px 0';
   const detail=d.createElement('p');detail.style.cssText='color:#64748b;font-size:12px';detail.textContent=contexto||'Movimentação hospitalar';
   const controls=d.createElement('div');controls.style.cssText='display:flex;gap:12px;margin-top:16px;flex-wrap:wrap';
-  const field=d.createElement('div');field.hidden=true;field.style.cssText='margin-top:18px;padding:12px;background:#f1f5f9;border-radius:8px';
+  const field=d.createElement('div');field.style.cssText='display:none;margin-top:18px;padding:12px;background:#f1f5f9;border-radius:8px';
   const label=d.createElement('label');label.textContent='Selecione o indicador obrigatório';label.style.cssText='display:block;font-weight:700;margin-bottom:8px';
   const select=d.createElement('select');select.style.cssText='width:100%;padding:11px;border:1px solid #94a3b8;border-radius:6px;background:white';select.appendChild(new Option('Selecione uma opção',''));
   TYPES.forEach(t=>select.appendChild(new Option(t,t)));
@@ -20,7 +20,7 @@ w.hsjEscolherIndicadorMovimentacao=function(contexto){
   function btn(label,color,fn){const b=d.createElement('button');b.textContent=label;b.style.cssText='padding:11px 20px;border-radius:8px;font-weight:700;border:1px solid #cbd5e1;cursor:pointer;background:'+color;b.onclick=fn;controls.appendChild(b)}
   let finished=false;function end(value){if(finished)return;finished=true;overlay.remove();resolve(value)}
   btn('NÃO','#f8fafc',()=>end({contabilizarIndicadores:false,tipoIndicador:null}));
-  btn('SIM','#dbeafe',()=>{controls.hidden=true;field.hidden=false;select.focus()});
+  btn('SIM','#dbeafe',()=>{controls.style.display='none';field.style.display='block';select.focus()});
   btn('Cancelar movimentação','#fff',()=>end(null));
   card.append(h,p,detail,controls,field);overlay.appendChild(card);d.body.appendChild(overlay);
   controls.querySelector('button')?.focus();
