@@ -1,5 +1,5 @@
 (()=>{const frame=document.getElementById('appFrame');if(!frame)return;
-const TYPES=['Admissão','Alta para casa (melhorada)','Óbito','Alta para o internamento','Alta a pedido','Alta por transferência','Alta com assistência domiciliar','Evasão','Cirurgias suspensas'];
+const TYPES=['Admissão','Alta para casa (melhorada)','Óbito','Alta para o internamento','Alta a pedido','Alta por transferência','Alta com assistência domiciliar','Evasão','Cirurgias suspensas','Alta administrativa por cirurgia suspensa'];
 function install(){let w,d;try{w=frame.contentWindow;d=frame.contentDocument}catch{return}if(!w||!d||!w.executarEntradaLeitoAtomica||!w.hsjConfirmarReservaComoAdmissao||!w.executarTransferenciaSeguraV20261009||!w.executarSaidaLeitoAtomica)return;if(w.__hsjIndicadoresObrigatorios20261027)return;w.__hsjIndicadoresObrigatorios20261027=true;
 w.hsjEscolherIndicadorMovimentacao=function(contexto){
  return new Promise(resolve=>{
@@ -28,7 +28,7 @@ w.hsjEscolherIndicadorMovimentacao=function(contexto){
 };
 function wrap(name,condition,context){
  const prior=w[name];if(typeof prior!=='function')return;
- w[name]=async function(args){const a={...(args||{})};if(condition(a)&&typeof a.contabilizarIndicadores!=='boolean'){const selection=await w.hsjEscolherIndicadorMovimentacao(context(a));if(!selection)throw new Error('Movimentação cancelada na confirmação de indicadores. Nenhum registro foi solicitado.');Object.assign(a,selection)}return prior.call(this,a)};
+ w[name]=async function(args){const a={...(args||{})};if(condition(a)&&!(typeof a.contabilizarIndicadores==='boolean'&&(a.contabilizarIndicadores===false||a.tipoIndicador))){const selection=await w.hsjEscolherIndicadorMovimentacao(context(a));if(!selection)throw new Error('Movimentação cancelada na confirmação de indicadores. Nenhum registro foi solicitado.');Object.assign(a,selection)}return prior.call(this,a)};
 }
 wrap('executarEntradaLeitoAtomica',a=>a.acao==='Admissão',()=> 'Admissão no setor');
 wrap('executarAdmissaoReservaAtomica',()=>true,()=> 'Admissão de reserva');
