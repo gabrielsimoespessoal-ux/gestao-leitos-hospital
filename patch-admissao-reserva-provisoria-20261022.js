@@ -23,12 +23,9 @@
    const definitivo=String(real).trim();
    if(!definitivo||/^RESERVA-SEM-PR-/i.test(definitivo)){w.alert('Informe um número definitivo válido.');return}
    if(!w.confirm('CONFIRMAR ADMISSÃO NO BANCO?\\nPaciente: '+nome+'\\nSetor/leito: '+setor+' / '+leito+'\\nAtendimento definitivo: '+definitivo+'\\n\\nA reserva será convertida em ocupação.'))return;
-   let indicador=false;
-   if(typeof w.hsjConfirmarIndicadorSimNao==='function')indicador=await w.hsjConfirmarIndicadorSimNao('Deseja contabilizar esta admissão nos indicadores hospitalares?');
-   else indicador=w.confirm('Deseja contabilizar esta admissão nos indicadores hospitalares?\\nOK = Sim; Cancelar = Não. A admissão acontece em ambas as opções.');
    btn.disabled=true;btn.textContent='Confirmando no banco...';
    try{
-    const resp=await w.hsjConfirmarReservaComoAdmissao({prontuarioProvisorio:id,prontuarioDefinitivo:definitivo,setor,leito,nome,nascimento:get('mov-nascimento'),sexo:get('mov-sexo'),perfil:get('mov-perfil-vaga'),convenio:get('mov-convenio'),origem:get('mov-origem'),precaucao:get('mov-precaucao'),usuario:w.usuarioAtual?.nome||'usuario',contabilizarIndicadores:indicador});
+    const resp=await w.hsjConfirmarReservaComoAdmissao({prontuarioProvisorio:id,prontuarioDefinitivo:definitivo,setor,leito,nome,nascimento:get('mov-nascimento'),sexo:get('mov-sexo'),perfil:get('mov-perfil-vaga'),convenio:get('mov-convenio'),origem:get('mov-origem'),precaucao:get('mov-precaucao'),usuario:w.usuarioAtual?.nome||'usuario'});
     if(!resp?.ok)throw Error('Banco não confirmou a admissão.');
     w.alert('ADMISSÃO CONFIRMADA NO BANCO. Leito '+leito+' agora está ocupado. Atualize o painel para conferir.');
     if(typeof w.carregarDadosDoFirebase==='function')await w.carregarDadosDoFirebase();
