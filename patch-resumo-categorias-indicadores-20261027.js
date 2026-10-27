@@ -1,5 +1,5 @@
 (()=>{const frame=document.getElementById('appFrame');if(!frame)return;
-const types=['Admissão','Alta para casa (melhorada)','Óbito','Alta para o internamento','Alta a pedido','Alta por transferência','Alta com assistência domiciliar','Evasão'];
+const types=['Admissão','Alta para casa (melhorada)','Óbito','Alta para o internamento','Alta a pedido','Alta por transferência','Alta com assistência domiciliar','Evasão','Cirurgias suspensas'];
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 function install(){let w,d;try{w=frame.contentWindow;d=frame.contentDocument}catch{return}if(!w||!d||typeof w.renderizarIndicadores!=='function'||!d.getElementById('indicadores'))return;if(w.__hsjCategoriasIndicadores20261027)return;w.__hsjCategoriasIndicadores20261027=true;
 function draw(){
