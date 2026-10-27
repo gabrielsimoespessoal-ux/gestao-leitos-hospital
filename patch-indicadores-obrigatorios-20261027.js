@@ -28,7 +28,7 @@ w.hsjEscolherIndicadorMovimentacao=function(contexto){
 };
 function wrap(name,condition,context){
  const prior=w[name];if(typeof prior!=='function')return;
- w[name]=async function(args){const a={...(args||{})};if(condition(a)&&typeof a.contabilizarIndicadores!=='boolean'){const selection=await w.hsjEscolherIndicadorMovimentacao(context(a));if(!selection)return {ok:false,canceladoIndicador:true};Object.assign(a,selection)}return prior.call(this,a)};
+ w[name]=async function(args){const a={...(args||{})};if(condition(a)&&typeof a.contabilizarIndicadores!=='boolean'){const selection=await w.hsjEscolherIndicadorMovimentacao(context(a));if(!selection)throw new Error('Movimentação cancelada na confirmação de indicadores. Nenhum registro foi solicitado.');Object.assign(a,selection)}return prior.call(this,a)};
 }
 wrap('executarEntradaLeitoAtomica',a=>a.acao==='Admissão',()=> 'Admissão no setor');
 wrap('executarAdmissaoReservaAtomica',()=>true,()=> 'Admissão de reserva');
