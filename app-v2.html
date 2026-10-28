@@ -3602,7 +3602,8 @@
                 if (!dentroDoPeriodo) return;
 
                 var pertenceSetor = setoresParaCalc.some(function(s) { return m.setor.includes(s.nome) || m.acao.includes('Externa'); });
-                var perfilNormalizado = String(m.perfil || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase();\r\n                var pertencePerfil = perfisSelecionados.some(function(p) { var basePerfil=String(p).normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase(); return perfilNormalizado.includes(basePerfil) || (basePerfil==='enfermaria clinica' && perfilNormalizado==='enfermaria clinica pediatrica') || (basePerfil==='enfermaria cirurgica' && perfilNormalizado==='enfermaria cirurgica pediatrica'); });
+                var perfilNormalizado = String(m.perfil || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+                var pertencePerfil = perfisSelecionados.some(function(p) { var basePerfil=String(p).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); return perfilNormalizado.includes(basePerfil) || (basePerfil==='enfermaria clinica' && perfilNormalizado==='enfermaria clinica pediatrica') || (basePerfil==='enfermaria cirurgica' && perfilNormalizado==='enfermaria cirurgica pediatrica'); });
 
                 var acaoStr = m.acao.toLowerCase();
                 var ehReserva = acaoStr.includes('reservado') || acaoStr.includes('reserva');
