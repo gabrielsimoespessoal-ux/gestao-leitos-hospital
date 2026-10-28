@@ -148,9 +148,10 @@ function bedDetail(bed,sector,base){
  const isolated=!!precaution&&!['nenhuma','nenhuma (padrao)','padrao','nao','sem','sem precaucao'].includes(precaution)&&/isolamento|precaucao|contato|goticulas|aeross/.test(precaution);
  const gender=norm(data.sexo||bed.sexo);
  const sex=(gender.startsWith('mascul')||gender==='m')?'♂':(gender.startsWith('feminin')||gender==='f')?'♀':'';
- const profile=norm(data.perfil);
- const pediatric= ['enfermaria clinica pediatrica','enfermaria cirurgica pediatrica'].includes(profile);
- const cm=bed.status==='ocupado'&&(profile==='enfermaria clinica'||profile==='enfermaria clinica pediatrica');
+ const profile=norm(data.perfil||data.perfilVaga||bed.perfil||bed.perfilVaga);
+ const context=[profile,norm(sector.nome),norm(sector.tipo)].join(' ');
+ const pediatric=['ocupado','reservado'].includes(bed.status)&&/pediatr|infantil/.test(context);
+ const cm=bed.status==='ocupado'&&(/enfermaria clinica/.test(profile)||(/pediatr|infantil/.test(profile)&&/clinica/.test(profile)));
  return {sex,isolated,cm,pediatric};
 }
 function render(){
