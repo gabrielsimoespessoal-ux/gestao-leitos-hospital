@@ -42,7 +42,7 @@
         if(!l||l.status!=='ocupado'||!l.prontuario)return;
         const b=w.basePacientesCadastrados?.[l.prontuario]||{};
         const perfil=String(b.perfil||'').trim().toLowerCase();
-        if(perfil!=='enfermaria clínica' && perfil!=='enfermaria clinica')return;
+        if(!['enfermaria clínica','enfermaria clinica','enfermaria clínica pediátrica','enfermaria clinica pediatrica'].includes(perfil))return;
 
         pill.style.position='relative';
         pill.style.overflow='visible';
