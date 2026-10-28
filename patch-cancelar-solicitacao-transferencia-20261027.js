@@ -30,8 +30,8 @@
      const novas=ativas.filter((_,i)=>i!==ix);
      // Firestore transactions reject custom-prototype nested objects in update().
      // Submit only a JSON-safe array of active requests. Leave all other fields untouched.
-     const seguras=JSON.parse(JSON.stringify(novas));
-     tx.update(ref,{transferenciasAtivas:seguras});
+     const payload=w.JSON.parse(JSON.stringify({transferenciasAtivas:novas}));
+     tx.update(ref,payload);
     });
     const snap=await getDoc(ref);
     if(!snap.exists()||snap.metadata?.fromCache)throw Error('Cancelamento gravado, mas conferência com o servidor indisponível. Atualize antes de tentar novamente.');
