@@ -28,17 +28,17 @@
      // Modifica SOMENTE transferenciasAtivas e metadados de versão. Não altera setoresData,
      // transferenciasFinalizadas, indicadores, movimentacoesHistorico nem cadastro do paciente.
      const novas=ativas.filter((_,i)=>i!==ix);
-     const revision=Number(state._meta?.revision||0);
-     tx.update(ref,{
-      transferenciasAtivas:novas,
-      _meta:{...(state._meta||{}),previousRevision:revision,revision:revision+1,updatedAt:new Date().toISOString(),editor:w.usuarioAtual?.nome||'usuario',safeguards:'cancelamento-solicitacao-sem-movimentacao'}
-     });
+     // Firestore transactions reject custom-prototype nested objects in update().
+     // Submit only a JSON-safe array of active requests. Leave all other fields untouched.
+     const seguras=JSON.parse(JSON.stringify(novas));
+     tx.update(ref,{transferenciasAtivas:seguras});
     });
     const snap=await getDoc(ref);
-    if(snap.exists()&&!snap.metadata.fromCache){
-     w.transferenciasAtivas=snap.data().transferenciasAtivas||[];
-     w.atualizarTabelasTransferencias();
-    }
+    if(!snap.exists()||snap.metadata?.fromCache)throw Error('Cancelamento gravado, mas conferência com o servidor indisponível. Atualize antes de tentar novamente.');
+    const remains=(snap.data().transferenciasAtivas||[]).some(item=>String(item.atendimento||'')===pr&&String(item.dataIso||item.data||'')===id&&String(item.paciente||'')===nome);
+    if(remains)throw Error('A solicitação ainda consta no banco. Atualize e confira antes de repetir.');
+    w.transferenciasAtivas=snap.data().transferenciasAtivas||[];
+    w.atualizarTabelasTransferencias();
     w.alert('Solicitação cancelada. Nenhum leito, indicador ou transferência realizada foi alterado.');
    }catch(e){w.alert('Cancelamento não confirmado: '+(e?.message||e))}
    finally{busy=false}
