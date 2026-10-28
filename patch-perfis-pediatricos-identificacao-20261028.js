@@ -26,7 +26,7 @@ function install(){
     const profile=norm(record.perfil||record.perfilVaga||bed.perfil||'');
     if(!profiles.some(p=>norm(p)===profile))continue;
     pill.classList.add('hsj-ped-perfil');
-    const badge=d.createElement('span');badge.className='hsj-perfil-ped-icon';badge.textContent=profile.includes('cirurgica')?'PED-C':'PED-CL';badge.title=profile.includes('cirurgica')?'Enfermaria Cirúrgica Pediátrica':'Enfermaria Clínica Pediátrica';badge.setAttribute('aria-label',badge.title);pill.appendChild(badge);
+    const badge=d.createElement('span');badge.className='hsj-perfil-ped-icon';badge.textContent='PED';badge.title=profile.includes('cirurgica')?'Enfermaria Cirúrgica Pediátrica':'Enfermaria Clínica Pediátrica';badge.setAttribute('aria-label',badge.title);pill.appendChild(badge);
    }
   }
  }
