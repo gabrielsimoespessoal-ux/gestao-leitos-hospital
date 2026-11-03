@@ -78,7 +78,15 @@ try{
  const snap=await getDoc(doc(w.db,'hospital','dados'));if(!snap.exists()||snap.metadata?.fromCache)throw Error('Dados principais sem confirmação do servidor');
  const state=snap.data();if(!Array.isArray(state.setoresData))throw Error('Setores inválidos');
  const now=new Date(),iso=now.toISOString(),mes=iso.slice(0,7),archive=refMonth(mes);
- await runTransaction(w.db,async tx=>{const existing=await tx.get(archive),list=existing.exists()?(existing.data().registros||[]):[],previous=list.length?new Date(list[list.length-1].criadoEm).getTime():now.getTime()-12*3600000;const from=Number.isFinite(previous)?previous:now.getTime()-12*3600000;const record={criadoEm:iso,inicio:new Date(from).toISOString(),responsavel:autor,observacoes,resumo:calculate(state,from,now.getTime()),revisaoFonte:Number(state._meta?.revision||0)};tx.set(archive,w.JSON.parse(w.JSON.stringify({registros:[...list,record],atualizadoEm:iso})))});
+ if(typeof w.hsjGravarPassagemPlantaoV2!=='function')throw Error('Módulo de gravação indisponível; atualize a página.');
+ const result=await w.hsjGravarPassagemPlantaoV2({
+  mes, responsavel:autor, observacoes,
+  setores:state.setoresData,
+  movimentacoes:state.movimentacoesHistorico||[],
+  transferencias:state.transferenciasAtivas||[],
+  revisaoFonte:Number(state._meta?.revision||0)
+ });
+ if(!result?.ok)throw Error('Servidor não confirmou o arquivamento.');
 status.textContent='Passagem arquivada com sucesso em '+display(iso);$('hsj-plantao-obs').value='';$('hsj-plantao-mes').value=mes;await read();refresh()
 }catch(e){status.textContent='Falha ao salvar: '+String(e.message||e)}
 finally{btn.disabled=false}
