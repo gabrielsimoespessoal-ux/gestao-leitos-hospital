@@ -21,20 +21,21 @@ function init(){
    if(!/^\d{4}-\d{2}-\d{2}$/.test(dt)||from&&dt<from||to&&dt>to)return false;
    return allSectors||selected.some(s=>[m.setor,m.origem,m.destino].some(k=>norm(k).includes(norm(s))));
   });
-  let adm=0,alta=0,uti=0,ext=0,death=0,int=0,excluded=(w.movimentacoesHistorico||[]).filter(m=>m.contabilizarIndicadores===false).length;
+  let adm=0,admSetorial=0,alta=0,uti=0,ext=0,death=0,int=0,excluded=(w.movimentacoesHistorico||[]).filter(m=>m.contabilizarIndicadores===false).length;
   for(const m of rows){
    const action=norm(m.acao),source=norm(m.origem||m.setor),destination=norm(m.destino);
-   if(action==='admissao')adm++;
+   if(action==='admissao'){adm++;if(!allSectors)admSetorial++;}
+   if(action.includes('transferencia interna') && !allSectors && destination!==source && selected.some(s=>norm(s)===destination))admSetorial++;
    if(/alta hospitalar|alta a pedido/.test(action))alta++;
    if(action.includes('obito'))death++;
    if(action.includes('transferencia externa'))ext++;
    if(action.includes('transferencia interna')){
      int++;
-     if((m.altaUTI===true||source.includes('uti'))&&!destination.includes('uti'))uti++;
+     if((m.altaUTI===true||source.includes('uti'))&&!destination.includes('uti') && (allSectors || selected.some(s=>norm(s)===source)))uti++;
    }
   }
   const card=(label,value)=>'<div class="hsj-evento"><small>'+label+'</small><strong>'+fmt(value)+'</strong></div>';
-  section.innerHTML='<h3 style="margin:0;color:#123f69">Indicadores por eventos confirmados</h3><p style="font-size:12px;color:#52657b;margin:5px 0">Apuração baseada no histórico de movimentações e na opção de contabilização. Alta da UTI não equivale a alta hospitalar. Óbitos são apresentados separadamente.</p><div class="hsj-kpis-eventos">'+card('Admissões',adm)+card('Altas hospitalares',alta)+card('Altas da UTI para enfermaria',uti)+card('Transferências externas',ext)+card('Óbitos',death)+card('Transferências internas',int)+'</div><p style="font-size:11px;color:#64748b;margin:0">Eventos não contabilizados no histórico total: '+fmt(excluded)+'. Os indicadores históricos anteriores podem não ter confirmação explícita registrada. Os demais cálculos legados da aba não foram recalculados por esta atualização.</p>';
+  section.innerHTML='<h3 style="margin:0;color:#123f69">Indicadores por eventos confirmados</h3><p style="font-size:12px;color:#52657b;margin:5px 0">Apuração baseada no histórico de movimentações e na opção de contabilização. Alta da UTI não equivale a alta hospitalar. Admissões setoriais incluem transferências internas de entrada, sem criar novas admissões hospitalares. Óbitos são apresentados separadamente.</p><div class="hsj-kpis-eventos">'+card('Admissões hospitalares',adm)+(!allSectors?card('Admissões nos setores selecionados',admSetorial):'')+card('Altas hospitalares',alta)+card('Altas da UTI para enfermaria',uti)+card('Transferências externas',ext)+card('Óbitos',death)+card('Transferências internas',int)+'</div><p style="font-size:11px;color:#64748b;margin:0">Eventos não contabilizados no histórico total: '+fmt(excluded)+'. Os indicadores históricos anteriores podem não ter confirmação explícita registrada. Os demais cálculos legados da aba não foram recalculados por esta atualização.</p>';
  }
  const prior=w.renderizarIndicadores;
  w.renderizarIndicadores=function(){const r=prior.apply(this,arguments);draw();return r};
