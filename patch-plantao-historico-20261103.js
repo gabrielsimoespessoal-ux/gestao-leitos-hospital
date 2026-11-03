@@ -46,7 +46,7 @@ async function buscarPassagensDoDia(){
   if(snap.metadata?.fromCache)throw Error('Servidor não confirmou o histórico da data selecionada.');
   const records=Array.isArray(snap.data()?.registros)?snap.data().registros:[];
   // A data ISO da gravação é UTC; comparar o dia no fuso de Aracaju.
-  const localDay=iso=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Maceio',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso));
+  const localDay=iso=>{const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Maceio',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(iso));const get=k=>parts.find(p=>p.type===k)?.value||'';return get('year')+'-'+get('month')+'-'+get('day')};
   passagensParaImpressao=records.filter(x=>x?.criadoEm&&localDay(x.criadoEm)===data).sort((a,b)=>String(a.criadoEm).localeCompare(String(b.criadoEm)));
   selector.replaceChildren(new Option(passagensParaImpressao.length?'Selecione uma passagem ('+passagensParaImpressao.length+')':'Nenhuma passagem arquivada nesta data',''));
   passagensParaImpressao.forEach((x,i)=>selector.add(new Option(display(x.criadoEm)+' — '+String(x.responsavel||'Sem responsável'),String(i))));
