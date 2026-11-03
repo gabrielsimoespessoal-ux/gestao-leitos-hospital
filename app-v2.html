@@ -2338,8 +2338,13 @@
             }
         }
 
+        var hsjUltimaTentativaBackupLocal = 0;
+        var hsjBackupEmAndamento = false;
         async function executarBackupPeriodico30Min() {
             if(!window.db || !window.hsjAuthReady || !hsjSnapshotServidorConfirmado || !window.firebaseModules || !window.firebaseModules.runTransaction) return false;
+            if(hsjBackupEmAndamento || Date.now()-hsjUltimaTentativaBackupLocal < 5*60*1000) return false;
+            hsjUltimaTentativaBackupLocal=Date.now();
+            hsjBackupEmAndamento=true;
             try {
                 const { doc, runTransaction } = window.firebaseModules;
                 var dadosRef = doc(window.db,'hospital','dados');
@@ -2392,6 +2397,8 @@
             } catch(e) {
                 console.error('Falha no backup periódico de 30 min:',e);
                 return false;
+            } finally {
+                hsjBackupEmAndamento=false;
             }
         }
 
