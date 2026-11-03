@@ -78,7 +78,7 @@ try{
  const snap=await getDoc(doc(w.db,'hospital','dados'));if(!snap.exists()||snap.metadata?.fromCache)throw Error('Dados principais sem confirmação do servidor');
  const state=snap.data();if(!Array.isArray(state.setoresData))throw Error('Setores inválidos');
  const now=new Date(),iso=now.toISOString(),mes=iso.slice(0,7),archive=refMonth(mes);
- await runTransaction(w.db,async tx=>{const existing=await tx.get(archive),list=existing.exists()?(existing.data().registros||[]):[],previous=list.length?new Date(list[list.length-1].criadoEm).getTime():now.getTime()-12*3600000;const from=Number.isFinite(previous)?previous:now.getTime()-12*3600000;const record={criadoEm:iso,inicio:new Date(from).toISOString(),responsavel:autor,observacoes,resumo:calculate(state,from,now.getTime()),revisaoFonte:Number(state._meta?.revision||0)};tx.set(archive,{registros:[...list,record],atualizadoEm:iso})});
+ await runTransaction(w.db,async tx=>{const existing=await tx.get(archive),list=existing.exists()?(existing.data().registros||[]):[],previous=list.length?new Date(list[list.length-1].criadoEm).getTime():now.getTime()-12*3600000;const from=Number.isFinite(previous)?previous:now.getTime()-12*3600000;const record={criadoEm:iso,inicio:new Date(from).toISOString(),responsavel:autor,observacoes,resumo:calculate(state,from,now.getTime()),revisaoFonte:Number(state._meta?.revision||0)};tx.set(archive,w.JSON.parse(w.JSON.stringify({registros:[...list,record],atualizadoEm:iso})))});
 status.textContent='Passagem arquivada com sucesso em '+display(iso);$('hsj-plantao-obs').value='';$('hsj-plantao-mes').value=mes;await read();refresh()
 }catch(e){status.textContent='Falha ao salvar: '+String(e.message||e)}
 finally{btn.disabled=false}
