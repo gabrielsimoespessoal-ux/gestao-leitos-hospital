@@ -2339,7 +2339,7 @@
         }
 
         async function executarBackupPeriodico30Min() {
-            if(!window.db || !window.firebaseModules || !window.firebaseModules.runTransaction) return false;
+            if(!window.db || !window.hsjAuthReady || !hsjSnapshotServidorConfirmado || !window.firebaseModules || !window.firebaseModules.runTransaction) return false;
             try {
                 const { doc, runTransaction } = window.firebaseModules;
                 var dadosRef = doc(window.db,'hospital','dados');
@@ -2448,7 +2448,7 @@
             hsjAtualizarProtecaoConexao(false, 'Conectando ao banco de dados...');
             if (!window.db) { hsjAtualizarProtecaoConexao(false, 'Configuração do banco indisponível.'); return; }
             const { doc, onSnapshot } = window.firebaseModules;
-            garantirSalasVirtuais();
+            // Evita transação pesada de provisionamento a cada abertura. A rotina permanece disponível para execução administrativa.
             onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
                 if(docSnap.metadata?.fromCache){multiusuarioStatus="conflito";hsjAtualizarProtecaoConexao(false,'Dados do cache local; aguardando confirmação do servidor.');console.warn("Dados recebidos do cache, aguardando confirmação do servidor.");return;}
                 if (docSnap.exists()) {
@@ -2498,7 +2498,7 @@
                 el.style.background='rgba(16,185,129,.28)';
             }
         }
-        setInterval(atualizarBadgeMultiusuario,500);
+        setInterval(atualizarBadgeMultiusuario,3000);
 
         // ---------------------------------------------
 
