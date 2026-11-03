@@ -23,7 +23,57 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        const auth = getAuth(app);
         window.db = db;
+        window.hsjAuthReady = false;
+        let hsjLoginFirebaseInicializado = false;
+        function hsjMostrarLoginFirebase(mensagem) {
+            let tela = document.getElementById('hsj-login-firebase');
+            if (!tela) {
+                tela = document.createElement('div');
+                tela.id = 'hsj-login-firebase';
+                tela.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;font:16px Arial,sans-serif';
+                tela.innerHTML = '<form id="hsj-login-form" style="width:100%;max-width:430px;padding:26px;background:#1e293b;border-radius:12px;box-sizing:border-box"><h2>Hospital São José</h2><p>Autenticação segura de acesso aos leitos</p><label for="hsj-email">E-mail autorizado</label><input id="hsj-email" type="email" required autocomplete="username" style="display:block;box-sizing:border-box;width:100%;padding:12px;margin:7px 0 17px"><label for="hsj-senha">Senha do Firebase</label><input id="hsj-senha" type="password" required autocomplete="current-password" style="display:block;box-sizing:border-box;width:100%;padding:12px;margin:7px 0 17px"><button id="hsj-entrar" type="submit" style="border:0;border-radius:7px;background:#38bdf8;color:#082f49;font-weight:bold;padding:12px 20px;cursor:pointer">Entrar</button><p id="hsj-msg-login" role="alert" style="line-height:1.5;font-size:14px"></p></form>';
+                document.body.appendChild(tela);
+                tela.querySelector('form').addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    const btn = tela.querySelector('#hsj-entrar');
+                    const msg = tela.querySelector('#hsj-msg-login');
+                    btn.disabled = true;
+                    msg.textContent = 'Autenticando...';
+                    try {
+                        await signInWithEmailAndPassword(auth, tela.querySelector('#hsj-email').value.trim(), tela.querySelector('#hsj-senha').value);
+                        tela.querySelector('#hsj-senha').value = '';
+                    } catch(err) {
+                        msg.textContent = 'Não foi possível autenticar (' + String(err.code || 'erro') + '). Confira as credenciais cadastradas no Firebase.';
+                    } finally {
+                        btn.disabled = false;
+                    }
+                });
+            }
+            tela.style.display = 'flex';
+            tela.querySelector('#hsj-msg-login').textContent = mensagem || '';
+        }
+        function hsjIniciarAposLogin() {
+            if (hsjLoginFirebaseInicializado) return;
+            if (typeof window.hsjFirebaseIniciarDados !== 'function') {
+                window.setTimeout(hsjIniciarAposLogin, 100);
+                return;
+            }
+            hsjLoginFirebaseInicializado = true;
+            window.hsjFirebaseIniciarDados();
+        }
+        onAuthStateChanged(auth, usuario => {
+            window.hsjAuthReady = !!usuario;
+            if (!usuario) {
+                hsjLoginFirebaseInicializado = false;
+                hsjMostrarLoginFirebase('Entre com a conta autorizada para consultar e movimentar os leitos.');
+                return;
+            }
+            const tela = document.getElementById('hsj-login-firebase');
+            if (tela) tela.style.display = 'none';
+            hsjIniciarAposLogin();
+        }, erro => hsjMostrarLoginFirebase('Falha na autenticação: ' + String(erro.code || 'erro')));
         window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction };
         // Salva observações do Modo TV dentro do contexto do próprio Firebase.
         // Evita objetos de outro frame e faz comparação atômica para não sobrescrever colegas.
