@@ -1115,6 +1115,56 @@
         // Recuperação automática desativada: preservar estritamente o estado atual; restaurar apenas manualmente após auditoria.
 
 // Sincronização em tempo real ao carregar a página
+
+        // A transação de arquivamento é executada NO MESMO contexto JavaScript do Firebase.
+        // Isso impede que objetos criados por scripts da moldura externa sejam rejeitados como custom Object.
+        window.hsjGravarPassagemPlantaoV2 = async function(payloadExterno) {
+            if(!window.hsjAuthReady) throw new Error('Autenticação não confirmada.');
+            const a = JSON.parse(JSON.stringify(payloadExterno || {}));
+            const nome = String(a.responsavel || '').trim().replace(/\s+/g,' ');
+            if(nome.length<3 || nome.length>120) throw new Error('Nome do responsável inválido.');
+            if(String(a.observacoes||'').length>12000) throw new Error('Observações acima do limite.');
+            if(!/^\d{4}-\d{2}$/.test(String(a.mes||''))) throw new Error('Mês inválido.');
+            if(!Array.isArray(a.movimentacoes) || !Array.isArray(a.setores) || !Array.isArray(a.transferencias)) throw new Error('Resumo incompleto.');
+            const ref = doc(db,'hospital','passagens_plantao_'+a.mes.replace('-','_'));
+            const {registros,gravado} = await runTransaction(db,async tx=>{
+                const snapshot = await tx.get(ref);
+                const previous = snapshot.exists() && Array.isArray(snapshot.data().registros) ? JSON.parse(JSON.stringify(snapshot.data().registros)) : [];
+                const now = new Date();
+                const nowMs = now.getTime();
+                let fromMs = previous.length ? new Date(previous[previous.length-1].criadoEm).getTime() : nowMs - 12*3600000;
+                if(!Number.isFinite(fromMs) || fromMs>nowMs) fromMs=nowMs-12*3600000;
+                const setores = a.setores.filter(s=>!s.virtual && s.nome!=='ESPERA VIRTUAL INTERNA');
+                const normalize = x => String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+                const occupancy = setores.map(s=>({nome:s.nome,internos:(s.leitos||[]).filter(l=>l.status==='ocupado').length}));
+                const moves = a.movimentacoes.filter(m=>{
+                  const when = new Date(m.dataIso||m.dataDesfechoObj||'').getTime();
+                  return Number.isFinite(when) && when>fromMs && when<=nowMs && m.contabilizarIndicadores!==false;
+                });
+                const internal = moves.filter(m=>normalize(m.acao).includes('transferencia interna') && normalize(m.origem)!==normalize(m.destino));
+                const admissions = moves.filter(m=>normalize(m.acao)==='admissao');
+                const deaths = moves.filter(m=>normalize(m.acao).includes('obito'));
+                const discharges = moves.filter(m=>{
+                   const v=normalize(m.acao);
+                   return v.includes('alta hospitalar')||v.includes('alta a pedido')||v.includes('alta para casa')||v.includes('alta com assistencia domiciliar')||v.includes('alta administrativa')||v.includes('transferencia externa')||v==='evasao';
+                });
+                const summary={
+                    ocupacao:occupancy,
+                    admSetorial:occupancy.map(s=>({nome:s.nome,total:admissions.filter(m=>normalize(m.destino)===normalize(s.nome)||normalize(m.setor).startsWith(normalize(s.nome))).length+internal.filter(m=>normalize(m.destino)===normalize(s.nome)).length})),
+                    admissoes:admissions.length,altas:discharges.length,obitos:deaths.length,internas:internal.length,
+                    altasUti:internal.filter(m=>normalize(m.origem).includes('uti')&&!normalize(m.destino).includes('uti')).length,
+                    pendentes:a.transferencias.map(t=>({paciente:String(t.paciente||''),atendimento:String(t.atendimento||''),destino:String(t.destino||''),status:String(t.status||''),pendencias:String(t.pendencias||''),dusv:String(t.dusv||''),data:String(t.dataIso||t.data||'')}))
+                };
+                const record={criadoEm:now.toISOString(),inicio:new Date(fromMs).toISOString(),responsavel:nome,
+                  observacoes:String(a.observacoes||''),resumo:summary,revisaoFonte:Number(a.revisaoFonte||0)};
+                // Build the actual payload as plain objects and arrays in this window's realm.
+                const next={registros:previous.concat([record]),atualizadoEm:record.criadoEm};
+                tx.set(ref,next);
+                return {registros:next.registros.length,gravado:record.criadoEm};
+            });
+            return {ok:true,registros,gravado};
+        };
+
         window.hsjFirebaseIniciarDados = carregarDadosDoFirebase;
     </script>
 
