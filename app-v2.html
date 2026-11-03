@@ -1115,9 +1115,7 @@
         // Recuperação automática desativada: preservar estritamente o estado atual; restaurar apenas manualmente após auditoria.
 
 // Sincronização em tempo real ao carregar a página
-        window.addEventListener('DOMContentLoaded', () => {
-            carregarDadosDoFirebase();
-        });
+        window.hsjFirebaseIniciarDados = carregarDadosDoFirebase;
     </script>
 
     <style>
