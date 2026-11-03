@@ -48,25 +48,39 @@ function printRecord(item){
   '<div class="resumo-setores"><section><h2>Internos por setor</h2>'+table(['Setor','Total'],resumo.ocupacao.map(x=>[x.nome,x.internos]))+'</section><section><h2>Admissões por setor</h2>'+table(['Setor','Total'],resumo.admSetorial.map(x=>[x.nome,x.total]))+'</section></div>'+
   '<h2>Transferências pendentes ('+numPendentes+')</h2>'+(numPendentes?table(['Paciente / prontuário','Destino','Situação','Pendências','DUSV'],resumo.pendentes.map(x=>[x.paciente+' / '+x.atendimento,x.destino,x.status,x.pendencias||'—',x.dusv||'—'])):'<p>Nenhuma transferência pendente.</p>')+
   '<h2>Observações do plantão</h2><div class="obs">'+esc(item.observacoes||'Sem observações registradas')+'</div><div class="rodape">Registro arquivado · Transferências internas: '+esc(resumo.internas)+' · Saídas da UTI: '+esc(resumo.altasUti)+'. Documento gerado a partir da passagem gravada.</div></body></html>';
-  const printFrame=d.createElement('iframe');
-  printFrame.style.cssText='position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;border:0';
-  d.body.appendChild(printFrame);
-  printFrame.onload=()=>{try{printFrame.contentWindow.focus();printFrame.contentWindow.print()}catch(e){w.alert('Falha ao abrir impressão: '+e.message)}setTimeout(()=>printFrame.remove(),120000)};
-  printFrame.contentDocument.open();printFrame.contentDocument.write(content);printFrame.contentDocument.close();
+  return content;
 }
 $('hsj-plantao-imprimir').onclick=async()=>{
  const btn=$('hsj-plantao-imprimir'),status=$('hsj-plantao-status');
- btn.disabled=true;
+ // Abrir diretamente no clique: abertura posterior a await costuma ser bloqueada pelo navegador.
+ const popup=w.open('','_blank');
+ if(!popup){
+  status.textContent='O navegador bloqueou a janela de impressão. Permita pop-ups para este aplicativo e tente novamente.';
+  return;
+ }
+ popup.document.open();
+ popup.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Preparando impressão</title></head><body><p>Preparando passagem de plantão para impressão...</p></body></html>');
+ popup.document.close();
+ btn.disabled=true;status.textContent='Preparando relatório A4...';
  try{
-  const now=new Date(),m=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const snap=await getDoc(refMonth(m));
+  const mes=$('hsj-plantao-mes').value || period();
+  const snap=await getDoc(refMonth(mes));
   if(snap.metadata?.fromCache)throw Error('Servidor não confirmou o histórico.');
   const records=snap.data()?.registros||[];
-  if(!records.length)throw Error('Nenhuma passagem arquivada neste mês. Libere uma passagem antes de imprimir.');
-  printRecord(records[records.length-1]);
- }catch(e){status.textContent=String(e.message||e)}finally{btn.disabled=false}
+  if(!records.length)throw Error('Não há passagem arquivada neste mês. Primeiro clique em "Liberar e arquivar passagem".');
+  const html=printRecord(records[records.length-1]);
+  if(popup.closed)throw Error('A janela de impressão foi fechada.');
+  popup.document.open();popup.document.write(html);popup.document.close();
+  popup.focus();
+  // Evita imprimir a tela de carregamento antes que o navegador componha o documento.
+  popup.setTimeout(()=>{if(!popup.closed)popup.print()},500);
+  status.textContent='Relatório aberto para impressão. Se necessário, use Ctrl + P na nova janela.';
+ }catch(e){
+  const msg=String(e.message||e);
+  status.textContent='Falha na impressão: '+msg;
+  if(!popup.closed){popup.document.body.textContent='Não foi possível preparar o relatório: '+msg}
+ }finally{btn.disabled=false}
 };
-
 $('hsj-plantao-consultar').onclick=read;
 $('hsj-plantao-gravar').onclick=async()=>{
 const autor=$('hsj-plantao-autor').value.trim().replace(/\s+/g,' '),observacoes=$('hsj-plantao-obs').value.trim(),status=$('hsj-plantao-status'),btn=$('hsj-plantao-gravar');
