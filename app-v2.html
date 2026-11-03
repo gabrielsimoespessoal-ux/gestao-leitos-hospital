@@ -2238,7 +2238,7 @@
         }
 
         async function salvarDadosNoFirebase(silencioso) {
-            if (!window.db || !hsjSnapshotServidorConfirmado || multiusuarioStatus==='conflito') { if(!silencioso) alert('Operação bloqueada: o banco de dados não confirmou os dados atuais. Recarregue após restabelecer a conexão.'); return false; }
+            if (!window.db || !window.hsjAuthReady || !hsjSnapshotServidorConfirmado || multiusuarioStatus==='conflito') { if(!silencioso) alert('Operação bloqueada: o banco de dados não confirmou os dados atuais. Recarregue após restabelecer a conexão.'); return false; }
             multiusuarioStatus='salvando';
             try {
                 const { doc, runTransaction } = window.firebaseModules;
