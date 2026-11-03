@@ -2030,7 +2030,8 @@
         var firebaseRevisionLocal = 0;
         var firebaseBaseSnapshotLocal = {};
         var ultimaGravacaoSeguraEm = null;
-        var multiusuarioStatus = 'sincronizado';
+        var multiusuarioStatus = 'aguardando';
+        var hsjSnapshotServidorConfirmado = false;
 
         function normalizarFirebaseSeguro(valor) {
             return JSON.parse(JSON.stringify(valor, function(chave, v) {
@@ -2188,7 +2189,7 @@
         }
 
         async function salvarDadosNoFirebase(silencioso) {
-            if (!window.db || !firebaseBaseSnapshotLocal) { if(!silencioso) alert('Sincronização ainda não inicializada. Aguarde o carregamento do banco e tente novamente.'); return false; }
+            if (!window.db || !hsjSnapshotServidorConfirmado || multiusuarioStatus==='conflito') { if(!silencioso) alert('Operação bloqueada: o banco de dados não confirmou os dados atuais. Recarregue após restabelecer a conexão.'); return false; }
             multiusuarioStatus='salvando';
             try {
                 const { doc, runTransaction } = window.firebaseModules;
@@ -2380,13 +2381,29 @@
             }catch(e){console.error('Falha ao provisionar salas virtuais sem perda de dados:',e);}
         }
         window.garantirSalasVirtuais=garantirSalasVirtuais;
+        function hsjAtualizarProtecaoConexao(online, detalhe) {
+            hsjSnapshotServidorConfirmado = !!online;
+            var aviso = document.getElementById('hsj-bloqueio-conexao');
+            if (!aviso) {
+                aviso = document.createElement('div');
+                aviso.id = 'hsj-bloqueio-conexao';
+                aviso.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.90);display:flex;align-items:center;justify-content:center;padding:22px;box-sizing:border-box;color:white;font-family:Arial,sans-serif;text-align:center';
+                aviso.innerHTML = '<div style="max-width:580px"><h2 style="font-size:23px;margin:0 0 14px">Dados dos leitos indisponíveis</h2><p id="hsj-bloqueio-detalhe" style="font-size:16px;line-height:1.5"></p><p style="font-size:14px;line-height:1.5">Por segurança, nenhuma movimentação poderá ser realizada até o banco confirmar os dados. Não interprete leitos vazios como disponíveis.</p><button id="hsj-reconectar-banco" type="button" style="padding:13px 22px;border:0;border-radius:8px;cursor:pointer;font-size:16px;background:#38bdf8;color:#082f49;font-weight:700">Reconectar e carregar dados</button></div>';
+                document.body.appendChild(aviso);
+                aviso.querySelector('#hsj-reconectar-banco').addEventListener('click',function(){location.reload();});
+            }
+            aviso.querySelector('#hsj-bloqueio-detalhe').textContent = detalhe || 'Aguardando confirmação do servidor.';
+            aviso.style.display = online ? 'none' : 'flex';
+        }
         function carregarDadosDoFirebase() {
-            if (!window.db) return;
+            hsjAtualizarProtecaoConexao(false, 'Conectando ao banco de dados...');
+            if (!window.db) { hsjAtualizarProtecaoConexao(false, 'Configuração do banco indisponível.'); return; }
             const { doc, onSnapshot } = window.firebaseModules;
             garantirSalasVirtuais();
             onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
-                if(docSnap.metadata?.fromCache){multiusuarioStatus="conflito";console.warn("Dados recebidos do cache, aguardando confirmação do servidor.");return;}
+                if(docSnap.metadata?.fromCache){multiusuarioStatus="conflito";hsjAtualizarProtecaoConexao(false,'Dados do cache local; aguardando confirmação do servidor.');console.warn("Dados recebidos do cache, aguardando confirmação do servidor.");return;}
                 if (docSnap.exists()) {
+                    if (!Array.isArray(docSnap.data()?.setoresData)) { multiusuarioStatus='conflito'; hsjAtualizarProtecaoConexao(false,'O servidor respondeu, mas a lista de setores está ausente ou inválida.');return; }
                     // Snapshot remoto é a fonte oficial, inclusive após gravação local.
 
                     const data = docSnap.data();
@@ -2407,8 +2424,16 @@
 
                     renderizarPainelLeitos();
                     aplicarPermissoesInterface();
+                    hsjAtualizarProtecaoConexao(true);
+                } else {
+                    multiusuarioStatus='conflito';
+                    hsjAtualizarProtecaoConexao(false,'Documento hospital/dados não encontrado no servidor.');
                 }
-            }, erro => {multiusuarioStatus="conflito";console.error("Sincronização interrompida",erro);alert("Conexão com banco interrompida: não considere os dados sincronizados.");});
+            }, erro => {
+                multiusuarioStatus='conflito';
+                console.error('Sincronização interrompida',erro);
+                hsjAtualizarProtecaoConexao(false,'Falha no Firebase (' + String(erro && erro.code || 'erro desconhecido') + '). Verifique conexão, permissões Firestore e serviço.');
+            });
         }
         function atualizarBadgeMultiusuario() {
             var el=document.getElementById('multiuser-status-badge');
