@@ -3682,7 +3682,7 @@
                 var dentroDoPeriodo = mData >= dataIni && mData <= dataFim;
                 if (!dentroDoPeriodo) return;
 
-                var pertenceSetor = setoresParaCalc.some(function(s) { return m.setor.includes(s.nome) || m.acao.includes('Externa'); });
+                var pertenceSetor = setoresParaCalc.some(function(s) { return String(m.setor||'').includes(s.nome) || String(m.destino||'')===s.nome || String(m.origem||'')===s.nome || String(m.acao||'').includes('Externa'); });
                 var perfilNormalizado = String(m.perfil || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
                 var pertencePerfil = perfisSelecionados.some(function(p) { var basePerfil=String(p).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); return perfilNormalizado.includes(basePerfil) || (basePerfil==='enfermaria clinica' && perfilNormalizado==='enfermaria clinica pediatrica') || (basePerfil==='enfermaria cirurgica' && perfilNormalizado==='enfermaria cirurgica pediatrica'); });
 
@@ -3711,7 +3711,9 @@
                         if(setorOrigemEhUTI && eventosSelecionados.includes('Alta')) countAlt++;
                     } else if (ehTrfInterna) {
                         if (eventosSelecionados.includes('Transferência Interna')) countTrfInt++;
-                        if(setorOrigemEhUTI && eventosSelecionados.includes('Alta')) countAlt++;
+                        // Uma transferencia entre setores conta como admissao NO DESTINO, nao como nova admissao hospitalar.
+                        if (!setoresSelecionados.includes('GERAL') && setoresSelecionados.length > 0 && setoresSelecionados.some(function(setor){return setor===String(m.destino||'');}) && eventosSelecionados.includes('Admissão')) countAdm++;
+                        if(setorOrigemEhUTI && eventosSelecionados.includes('Alta') && (setoresSelecionados.includes('GERAL') || setoresSelecionados.length===0 || setoresSelecionados.some(function(setor){return setor===String(m.origem||'');}))) countAlt++;
                     } else {
                         if (m.acao === 'Admissão' && eventosSelecionados.includes('Admissão')) countAdm++;
                         if ((m.acao.includes('Alta') || m.acao.includes('Óbito') || ehSaidaUti) && eventosSelecionados.includes('Alta')) {
@@ -3783,10 +3785,10 @@
                 var sTxDesocpAcumSetor = sMovsSetor > 0 ? (100 - parseFloat(sTxOcpAcumSetor)).toFixed(1) + '%' : txDesocpAcumStr;
                 var sPacDiaAcumSetor = sMovsSetor > 0 ? mediaPacientesDiaAcum : 0;
 
-                var sAdmSetor = movimentacoesHistorico.filter(function(m){ return m.setor.includes(s.nome) && m.acao === 'Admissão'; }).length;
+                var sAdmSetor = movimentacoesHistorico.filter(function(m){ var dt = new Date(m.dataDesfechoObj || m.dataIso || ''); return m.contabilizarIndicadores !== false && !isNaN(dt.getTime()) && dt >= dataIni && dt <= dataFim && ((m.acao === 'Admissão' && String(m.setor||'').includes(s.nome)) || (/transfer[eê]ncia interna/i.test(String(m.acao||'')) && String(m.destino||'') === s.nome && String(m.origem||'') !== s.nome)); }).length;
                 var sResIntSetor = movimentacoesHistorico.filter(function(m){ var o=(m.origem||'').toUpperCase(); return m.setor.includes(s.nome) && m.acao.toLowerCase().includes('reserva') && (o.includes('REMANEJAMENTO') || o.includes('SETOR INTERNO') || setoresData.some(function(st){return o===st.nome || o.includes(st.nome);})); }).length;
                 var sResExtSetor = movimentacoesHistorico.filter(function(m){ var o=(m.origem||'').toUpperCase(); return m.setor.includes(s.nome) && m.acao.toLowerCase().includes('reserva') && (!o.includes('REMANEJAMENTO') && !o.includes('SETOR INTERNO') && !setoresData.some(function(st){return o===st.nome || o.includes(st.nome);})); }).length;
-                var sAltSetor = movimentacoesHistorico.filter(function(m){ var setorUTI = m.setor.toUpperCase().includes('UTI') || (m.origem && m.origem.toUpperCase().includes('UTI')); return m.setor.includes(s.nome) && (m.acao.includes('Alta') || m.acao.includes('Óbito') || (setorUTI && m.acao.includes('Transferência'))); }).length;
+                var sAltSetor = movimentacoesHistorico.filter(function(m){ var dt = new Date(m.dataDesfechoObj || m.dataIso || ''); var setorUTI = String(m.origem||m.setor||'').toUpperCase().includes('UTI'); return m.contabilizarIndicadores !== false && !isNaN(dt.getTime()) && dt >= dataIni && dt <= dataFim && String(m.setor||'').includes(s.nome) && (String(m.acao||'').includes('Alta') || String(m.acao||'').includes('Óbito') || (setorUTI && /transfer[eê]ncia interna/i.test(String(m.acao||'')) && String(m.destino||'')!==String(m.origem||''))); }).length;
                 var sObSetor = movimentacoesHistorico.filter(function(m){ return m.setor.includes(s.nome) && m.acao.includes('Óbito'); }).length;
                 var sTrfExtSetor = movimentacoesHistorico.filter(function(m){ return m.acao.toLowerCase().includes('transferência externa'); }).length;
 
