@@ -2530,7 +2530,7 @@
         let hsjDadosListenerToken = 0;
         function hsjAgendarReconexaoDados() {
             if(hsjDadosRetryTimer || !window.hsjAuthReady || hsjSnapshotServidorConfirmado) return;
-            const delay = Math.min(60000, 8000 * Math.pow(2, Math.min(hsjDadosRetryCount, 3)));
+            const delay = Math.min(60000, 20000 * Math.pow(2, Math.min(hsjDadosRetryCount, 2)));
             hsjDadosRetryTimer = window.setTimeout(() => {
                 hsjDadosRetryTimer = null;
                 if(window.hsjAuthReady && !hsjSnapshotServidorConfirmado) carregarDadosDoFirebase();
