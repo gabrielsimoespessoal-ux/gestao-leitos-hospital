@@ -74,18 +74,31 @@ function render(win,doc){
    bySector.set(x.setor,state);
   }
  }
- const fullyCovered=covered===days.length;
+ const external=Array.isArray(win.__hsjHistoricOccupancyVerified)?win.__hsjHistoricOccupancyVerified:[];
+ let historicalDays=0;
+ const claimed=new Set();
+ if(s.all){
+  for(const x of external){
+   const ds=periodDays(x.inicio,x.fim);
+   if(!ds.length||!ds.every(day=>days.includes(day)))continue;
+   if(ds.some(day=>claimed.has(day)||daily[day]?.setores))continue;
+   if(!Number.isSafeInteger(x.pacientesDia)||!Number.isSafeInteger(x.leitosDia)||x.pacientesDia<0||x.leitosDia<1||x.pacientesDia>x.leitosDia)continue;
+   ds.forEach(day=>claimed.add(day));historicalDays+=ds.length;occ+=x.pacientesDia;capacity+=x.leitosDia;
+  }
+ }
+ const totalCovered=covered+historicalDays;
+ const fullyCovered=totalCovered===days.length;
  const certified=fullyCovered&&complete===days.length;
  const shown=capacity?pct(occ,capacity):'N/D';
- const label=certified?'Taxa mensal validada':fullyCovered?'Taxa mensal por censos registrados (provisória)':'Taxa parcial por censos registrados';
+ const label=certified?'Taxa mensal validada':fullyCovered?'Taxa mensal completa (provisória)':'Taxa parcial por dados registrados';
  main.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0">'+
   '<div style="border:1px solid #cad9e9;background:#f1f7ff;border-radius:8px;padding:9px 13px;min-width:175px"><small>'+label+'</small><div style="font-size:24px;font-weight:700">'+esc(shown)+'</div></div>'+
   '<div style="border:1px solid #cad9e9;border-radius:8px;padding:9px 13px"><small>Pacientes-dia registrados</small><div style="font-size:20px;font-weight:700">'+occ+'</div></div>'+
   '<div style="border:1px solid #cad9e9;border-radius:8px;padding:9px 13px"><small>Leitos operacionais-dia registrados</small><div style="font-size:20px;font-weight:700">'+capacity+'</div></div>'+
-  '<div style="border:1px solid #cad9e9;border-radius:8px;padding:9px 13px"><small>Dias com censo</small><div style="font-size:20px;font-weight:700">'+covered+' / '+days.length+'</div></div></div>'+
+  '<div style="border:1px solid #cad9e9;border-radius:8px;padding:9px 13px"><small>Dias com censo</small><div style="font-size:20px;font-weight:700">'+totalCovered+' / '+days.length+'</div></div></div>'+
   '<details style="font-size:12px"><summary style="cursor:pointer;font-weight:600">Ver ocupação por setor</summary><div style="overflow-x:auto;margin-top:6px"><table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr><th style="text-align:left">Setor</th><th>Pacientes-dia</th><th>Leitos-dia</th><th>Taxa</th><th>Dias</th></tr></thead><tbody>'+
    [...bySector].sort((a,b)=>a[0].localeCompare(b[0],'pt-BR')).map(([name,v])=>'<tr><td style="padding:5px;border-bottom:1px solid #eee">'+esc(name)+'</td><td style="text-align:center">'+v.occupied+'</td><td style="text-align:center">'+v.operational+'</td><td style="text-align:center">'+pct(v.occupied,v.operational)+'</td><td style="text-align:center">'+v.days+'</td></tr>').join('')+'</tbody></table></div></details>';
- footer.textContent=(certified?'Todos os censos do período foram fechados.':fullyCovered?'Todos os dias têm registro, mas há censos ainda não fechados; resultado provisório.':'Faltam '+missing.length+' dia(s) de censo no período; resultado parcial, não utilizar como taxa mensal oficial.')+
+ footer.textContent=(certified?'Todos os censos do período foram fechados.':fullyCovered?'Todos os dias têm registro, mas há censos ainda não fechados; resultado provisório.':'Faltam '+(days.length-totalCovered)+' dia(s) de censo no período; resultado parcial, não utilizar como taxa mensal oficial.')+
   ' · Excluídos: espera virtual, salas operatórias, SRPA e urgências. Leitos bloqueados não entram no denominador.'+
   (saveError?' · ALERTA: não foi possível gravar censo diário: '+saveError:'');
  // Legacy accumulated occupancy is not evidence-based: suppress it, never fill with approximations.
