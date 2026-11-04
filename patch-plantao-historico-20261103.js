@@ -87,6 +87,28 @@ function printRecord(item){
   const data=display(item.criadoEm),inicio=display(item.inicio),responsavel=esc(item.responsavel||'');
   const resumo=item.resumo;
   const numPendentes=(resumo.pendentes||[]).length;
+  // Somente em relatórios antigos sem localização gravada: complementar com a posição
+  // atual, sinalizando claramente que ela NÃO é um dado histórico.
+  const normPr=x=>String(x??'').replace(/[^0-9A-Za-z]/g,'').toUpperCase();
+  const positions=new Map();
+  for(const sector of (w.setoresData||[])){
+   for(const bed of (sector.leitos||[])){
+    if(!['ocupado','reservado'].includes(bed.status))continue;
+    const key=normPr(bed.prontuario);
+    if(!key)continue;
+    const list=positions.get(key)||[];
+    list.push({setor:sector.nome,leito:bed.n,status:bed.status});
+    positions.set(key,list);
+   }
+  }
+  const missingOriginal=(resumo.pendentes||[]).some(x=>!(x.origemSetor&&x.origemLeito));
+  const lookupNow=x=>{
+   if(x.origemSetor&&x.origemLeito)return x.origemSetor+' · Leito '+x.origemLeito;
+   const list=positions.get(normPr(x.atendimento))||[];
+   const occupied=list.filter(z=>z.status==='ocupado');
+   const match=occupied.length===1?occupied[0]:(occupied.length===0&&list.length===1?list[0]:null);
+   return match?match.setor+' · Leito '+match.leito+' (atual*)':'Não registrado';
+  };
   // A página é compacta, mas não corta solicitações extensas quando o conteúdo não couber.
   const compacto=numPendentes>8?'compacto':'';
   const content='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Passagem de plantão NIR - '+esc(data)+'</title><style>'+
@@ -94,7 +116,8 @@ function printRecord(item){
   '</style></head><body class="'+compacto+'"><header><div style="display:flex;align-items:center;gap:8px"><img src="./sigma-mark.svg" alt="SIGMA" style="width:35px;height:35px;object-fit:contain"><div><h1>SIGMA · Hospital São José</h1><strong>NIR — PASSAGEM DE PLANTÃO</strong></div></div><div class="dados">Liberada por: <b>'+responsavel+'</b> · Data e hora: '+esc(data)+'</div><div>Período: '+esc(inicio)+' até '+esc(data)+'</div></header>'+
   '<div class="grade">'+[['Internos',resumo.ocupacao.reduce((n,x)=>n+x.internos,0)],['Admissões',resumo.admissoes],['Altas',resumo.altas],['Óbitos',resumo.obitos]].map(x=>'<div class="kpi">'+esc(x[0])+'<b>'+esc(x[1])+'</b></div>').join('')+'</div>'+
   '<div class="resumo-setores"><section><h2>Internos por setor</h2>'+table(['Setor','Total'],resumo.ocupacao.map(x=>[x.nome,x.internos]))+'</section><section><h2>Admissões por setor</h2>'+table(['Setor','Total'],resumo.admSetorial.map(x=>[x.nome,x.total]))+'</section></div>'+
-  '<h2>Transferências pendentes ('+numPendentes+')</h2>'+(numPendentes?table(['Paciente / prontuário','Origem + leito','Destino','Situação','Pendências','DUSV'],resumo.pendentes.map(x=>[x.paciente+' / '+x.atendimento,x.origemSetor&&x.origemLeito?x.origemSetor+' · Leito '+x.origemLeito:'Não registrado',x.destino,x.status,x.pendencias||'—',x.dusv||'—'])):'<p>Nenhuma transferência pendente.</p>')+
+  '<h2>Transferências pendentes ('+numPendentes+')</h2>'+(numPendentes?table(['Paciente / prontuário','Origem + leito','Destino','Situação','Pendências','DUSV'],resumo.pendentes.map(x=>[x.paciente+' / '+x.atendimento,lookupNow(x),x.destino,x.status,x.pendencias||'—',x.dusv||'—'])):'<p>Nenhuma transferência pendente.</p>')+
+  (missingOriginal?'<p style="font-size:7pt;color:#475569">* Localização atual consultada na impressão. Não comprova o leito na data da passagem arquivada.</p>':'')+
   '<h2>Observações do plantão</h2><div class="obs">'+esc(item.observacoes||'Sem observações registradas')+'</div><div class="rodape">Registro arquivado · Transferências internas: '+esc(resumo.internas)+' · Saídas da UTI: '+esc(resumo.altasUti)+'. Documento gerado a partir da passagem gravada.</div></body></html>';
   return content;
 }
