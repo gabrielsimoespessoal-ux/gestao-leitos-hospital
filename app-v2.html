@@ -2510,19 +2510,59 @@
             }catch(e){console.error('Falha ao provisionar salas virtuais sem perda de dados:',e);}
         }
         window.garantirSalasVirtuais=garantirSalasVirtuais;
+        // Proteção de escrita sempre depende da última confirmação remota.
+        // Após uma confirmação nesta sessão, os leitos podem continuar VISÍVEIS como
+        // informação desatualizada, mas operações continuam bloqueadas até reconectar.
+        var hsjHouveConfirmacaoServidorNestaSessao = false;
         function hsjAtualizarProtecaoConexao(online, detalhe) {
             hsjSnapshotServidorConfirmado = !!online;
-            var aviso = document.getElementById('hsj-bloqueio-conexao');
-            if (!aviso) {
-                aviso = document.createElement('div');
-                aviso.id = 'hsj-bloqueio-conexao';
-                aviso.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.90);display:flex;align-items:center;justify-content:center;padding:22px;box-sizing:border-box;color:white;font-family:Arial,sans-serif;text-align:center';
-                aviso.innerHTML = '<div style="max-width:580px"><h2 style="font-size:23px;margin:0 0 14px">Dados dos leitos indisponíveis</h2><p id="hsj-bloqueio-detalhe" style="font-size:16px;line-height:1.5"></p><p style="font-size:14px;line-height:1.5">Por segurança, nenhuma movimentação poderá ser realizada até o banco confirmar os dados. Não interprete leitos vazios como disponíveis.</p><button id="hsj-reconectar-banco" type="button" style="padding:13px 22px;border:0;border-radius:8px;cursor:pointer;font-size:16px;background:#38bdf8;color:#082f49;font-weight:700">Reconectar e carregar dados</button></div>';
+            if(online) hsjHouveConfirmacaoServidorNestaSessao = true;
+            var aviso=document.getElementById('hsj-bloqueio-conexao');
+            if(!aviso){
+                aviso=document.createElement('div');
+                aviso.id='hsj-bloqueio-conexao';
+                aviso.setAttribute('role','status');
+                aviso.style.cssText='position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,.88);display:flex;align-items:center;justify-content:center;padding:22px;box-sizing:border-box;color:white;font-family:Arial,sans-serif;text-align:center';
+                aviso.innerHTML='<section style="width:min(520px,96vw);padding:18px">'+
+                  '<div class="hsj-fox-run" aria-hidden="true"><svg viewBox="0 0 220 140" width="220" height="140" xmlns="http://www.w3.org/2000/svg">'+
+                  '<path d="M67 90Q27 48 11 90Q30 133 76 108" fill="#f68b35" stroke="#a84a1a" stroke-width="4"/>'+
+                  '<path d="M12 84Q20 66 32 68Q29 93 19 99Z" fill="#fff2e4"/>'+
+                  '<ellipse cx="108" cy="91" rx="54" ry="29" fill="#f68b35"/>'+
+                  '<path d="M76 96Q115 129 153 99" fill="#fff1dc"/>'+
+                  '<path d="M83 108L65 130M127 109L145 131" stroke="#173956" stroke-width="13" stroke-linecap="round"/>'+
+                  '<path d="M130 75Q161 35 196 67Q203 100 163 109Q135 103 130 75Z" fill="#f58a34"/>'+
+                  '<path d="M151 57L158 21L175 52L190 28L192 68" fill="#f58a34" stroke="#9d4919" stroke-width="4"/>'+
+                  '<path d="M145 86Q172 119 197 87Q177 96 145 86" fill="#fff5e8"/>'+
+                  '<circle cx="174" cy="73" r="3.5" fill="#173956"/><circle cx="201" cy="83" r="5" fill="#173956"/>'+
+                  '<path d="M97 67L124 68L139 94L101 103Z" fill="#fff" stroke="#0b789e" stroke-width="3"/>'+
+                  '<path d="M112 78V93M104 85H120" stroke="#08aeb3" stroke-width="5" stroke-linecap="round"/>'+
+                  '</svg></div>'+
+                  '<div class="hsj-fox-loader" aria-label="Carregando"></div>'+
+                  '<h2 style="font-size:22px;margin:10px 0">SIGMA está sincronizando os leitos</h2>'+
+                  '<p id="hsj-bloqueio-detalhe" style="font-size:14px;line-height:1.5"></p>'+
+                  '<p style="font-size:13px;line-height:1.5;color:#cbd5e1">Movimentações protegidas até confirmação dos dados pelo servidor. Não interprete leitos sem confirmação como disponíveis.</p>'+
+                  '<button id="hsj-reconectar-banco" type="button" style="padding:12px 20px;border:0;border-radius:8px;cursor:pointer;font-size:14px;background:#38bdf8;color:#082f49;font-weight:700">Tentar reconectar</button></section>';
                 document.body.appendChild(aviso);
-                aviso.querySelector('#hsj-reconectar-banco').addEventListener('click',function(){location.reload();});
+                const style=document.createElement('style');style.id='hsj-fox-animation';
+                style.textContent='@keyframes hsj-fox-run{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(2deg)}}@keyframes hsj-fox-spin{to{transform:rotate(360deg)}}#hsj-bloqueio-conexao .hsj-fox-run{animation:hsj-fox-run .48s ease-in-out infinite;transform-origin:center}#hsj-bloqueio-conexao .hsj-fox-loader{height:28px;width:28px;margin:0 auto;border:4px solid #2b5771;border-top-color:#2dd4bf;border-radius:50%;animation:hsj-fox-spin .8s linear infinite}@media(prefers-reduced-motion:reduce){#hsj-bloqueio-conexao .hsj-fox-run,#hsj-bloqueio-conexao .hsj-fox-loader{animation:none!important}}';
+                document.head.appendChild(style);
+                aviso.querySelector('#hsj-reconectar-banco').onclick=()=>{if(window.hsjAuthReady)carregarDadosDoFirebase();else location.reload();};
             }
-            aviso.querySelector('#hsj-bloqueio-detalhe').textContent = detalhe || 'Aguardando confirmação do servidor.';
-            aviso.style.display = online ? 'none' : 'flex';
+            aviso.querySelector('#hsj-bloqueio-detalhe').textContent=detalhe||'Aguardando confirmação do servidor.';
+            // Se já houve confirmação nesta sessão, manter visualização histórica,
+            // claramente desatualizada, sem permitir gravações.
+            const bannerId='hsj-servidor-sem-confirmacao';
+            let banner=document.getElementById(bannerId);
+            if(!banner){
+                banner=document.createElement('div');banner.id=bannerId;banner.setAttribute('role','alert');
+                banner.style.cssText='display:none;position:fixed;top:92px;right:18px;z-index:2147483645;background:#fff7ed;color:#9a3412;border:2px solid #f59e0b;border-radius:10px;padding:10px 13px;max-width:440px;box-shadow:0 4px 14px #0002;font:600 13px Arial,sans-serif';
+                document.body.appendChild(banner);
+            }
+            if(online){aviso.style.display='none';banner.style.display='none';}
+            else if(hsjHouveConfirmacaoServidorNestaSessao){
+                aviso.style.display='none';banner.style.display='block';
+                banner.textContent='⚠ Dados exibidos podem estar desatualizados. Movimentações bloqueadas até reconectar. '+(detalhe||'');
+            }else{aviso.style.display='flex';banner.style.display='none';}
         }
         let hsjDadosUnsubscribe = null;
         let hsjDadosRetryTimer = null;
