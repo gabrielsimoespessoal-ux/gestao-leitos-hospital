@@ -64,7 +64,6 @@ function init(){
  };
 }
 frame.addEventListener('load',()=>{installed=false;setTimeout(init,950)});
-const interval=setInterval(init,1500);
-setTimeout(()=>clearInterval(interval),60000);
+setInterval(init,2000);
 init();
 })();
