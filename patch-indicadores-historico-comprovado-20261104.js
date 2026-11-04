@@ -59,6 +59,7 @@ async function load(w,force=false){
  if(!force&&Date.now()-lastLoad<30000)return;
  const mod=w.firebaseModules,snap=await mod.getDoc(mod.doc(w.db,'hospital',PATH));
  cache=snap.exists()&&Array.isArray(snap.data().periodos)?snap.data().periodos:[];
+ w.__hsjHistoricOccupancyVerified=cache;
  lastLoad=Date.now();error='';
 }
 function render(w,d){
