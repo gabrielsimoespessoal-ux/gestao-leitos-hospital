@@ -4,7 +4,7 @@ const frame=document.getElementById('appFrame');if(!frame)return;
 const TZ='America/Maceio';
 const excluded=/ESPERA VIRTUAL|SALAS OPERAT[OÓ]RIAS|^SRPA$|URGENCIA|URGÊNCIA/i;
 let wired=false,writing=false,lastAttempt='',daily={},loadingKey='',loadVersion=0;
-let dataOk=false,saveError='',lastSeenRevision=null;
+let saveError='';
 const dateKey=dt=>{
  const parts=new Intl.DateTimeFormat('en-US',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(dt);
  const o={};parts.forEach(p=>o[p.type]=p.value);return o.year+'-'+o.month+'-'+o.day;
@@ -150,7 +150,7 @@ async function capture(win,doc,snapshot){
    if(prev&&Number(prev.versaoFonte)>revision)return prev;
    tx.set(destination,current);return current;
   });
-  daily[day]=record;lastAttempt=signature;saveError='';lastSeenRevision=revision;
+  daily[day]=record;lastAttempt=signature;saveError='';
   render(win,doc);
  }catch(err){saveError=String(err.code||err.message||err);render(win,doc)}
  finally{writing=false}
@@ -170,7 +170,24 @@ function init(){
   };
   const dates=['filtro-data-inicio','filtro-data-fim'];
   dates.forEach(id=>doc.getElementById(id)?.addEventListener('change',()=>{loadRange(win,doc).catch(()=>{});render(win,doc)}));
-  setInterval(()=>{if(!frame.isConnected)return;loadRange(win,doc).catch(()=>{});render(win,doc)},120000);
+  setInterval(()=>{
+   if(!frame.isConnected)return;
+   loadingKey='';
+   loadRange(win,doc).catch(()=>{});
+   render(win,doc);
+  },120000);
+  // Detect day rollover even if no hospital movement has occurred.
+  let lastDay=dateKey(new Date());
+  setInterval(async()=>{
+   if(!frame.isConnected||!activeSource(win))return;
+   const now=dateKey(new Date());
+   if(now===lastDay)return;
+   lastDay=now;
+   try{
+    const snap=await win.firebaseModules.getDoc(win.firebaseModules.doc(win.db,'hospital','dados'));
+    await capture(win,doc,snap);
+   }catch(err){saveError='Censo na mudança de dia: '+String(err.code||err.message||err);render(win,doc)}
+  },60000);
  }
  loadRange(win,doc).catch(()=>{});render(win,doc);
 }
