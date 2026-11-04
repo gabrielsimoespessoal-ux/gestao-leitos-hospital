@@ -12,7 +12,7 @@ if(w.__hsjPlantaoHistorico20261103)return;w.__hsjPlantaoHistorico20261103=true;m
 const {doc,getDoc,runTransaction}=w.firebaseModules,root=d.getElementById('plantao');
 const style=d.createElement('style');style.textContent='#plantao .hsj-bloco{background:white;border:1px solid #cbd5e1;padding:15px;border-radius:10px;margin:12px 0}#plantao table{width:100%;border-collapse:collapse;font-size:13px}#plantao td,#plantao th{padding:8px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}#plantao input,#plantao textarea{padding:10px;border:1px solid #94a3b8;border-radius:7px;max-width:100%}#plantao .hsj-nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}#plantao .hsj-num{padding:12px;background:#f1f5f9;border-radius:8px}#plantao .hsj-num b{font-size:24px;display:block;color:#075985}#plantao h3{margin-bottom:12px;color:#123f69}#plantao .hsj-help{color:#64748b;font-size:12px;margin:8px 0}';
 d.head.appendChild(style);
-root.innerHTML='<div class="page-header"><div><h2>Passagem de plantão — NIR</h2><p>Resumo dos setores, movimentações e transferências pendentes.</p></div></div><section class="hsj-bloco" id="hsj-plantao-resumo"></section><section class="hsj-bloco" id="hsj-plantao-pendentes"></section><section class="hsj-bloco"><h3>Registrar e liberar passagem</h3><label><strong>Nome completo de quem libera *</strong></label><div><input id="hsj-plantao-autor" maxlength="120" style="width:min(480px,100%)" placeholder="Nome do profissional responsável"></div><p class="hsj-help">O login é compartilhado; o nome é obrigatório.</p><label><strong>Observações para o próximo plantão</strong></label><div><textarea id="hsj-plantao-obs" rows="5" maxlength="12000" style="width:100%" placeholder="Intercorrências, avisos, prioridades..."></textarea></div><p class="hsj-help">O relatório será arquivado como retrato do momento e não alterará leitos ou indicadores.</p><button class="btn btn-success" id="hsj-plantao-gravar">Liberar e arquivar passagem</button><p id="hsj-plantao-status" role="status"></p></section><section class="hsj-bloco"><h3>Histórico de passagens anteriores</h3><label>Mês <input type="month" id="hsj-plantao-mes"></label> <button class="btn" id="hsj-plantao-consultar">Consultar</button> <button type="button" class="btn btn-success" id="hsj-plantao-imprimir-historico">Imprimir passagem marcada (A4)</button><p class="hsj-help">Histórico a partir desta atualização; registros antigos não são inventados.</p><div id="hsj-plantao-historico"></div></section>';
+root.innerHTML='<div class="page-header"><div><h2>Passagem de plantão — NIR</h2><p>Resumo dos setores, movimentações e transferências pendentes.</p></div></div><section class="hsj-bloco" id="hsj-plantao-acumulado-dia"><h3>Admissões do dia — acumulado confirmado</h3><p class="hsj-help">Consultando a última passagem liberada...</p></section><section class="hsj-bloco" id="hsj-plantao-resumo"></section><section class="hsj-bloco" id="hsj-plantao-pendentes"></section><section class="hsj-bloco"><h3>Registrar e liberar passagem</h3><label><strong>Nome completo de quem libera *</strong></label><div><input id="hsj-plantao-autor" maxlength="120" style="width:min(480px,100%)" placeholder="Nome do profissional responsável"></div><p class="hsj-help">O login é compartilhado; o nome é obrigatório.</p><label><strong>Observações para o próximo plantão</strong></label><div><textarea id="hsj-plantao-obs" rows="5" maxlength="12000" style="width:100%" placeholder="Intercorrências, avisos, prioridades..."></textarea></div><p class="hsj-help">O relatório será arquivado como retrato do momento e não alterará leitos ou indicadores.</p><button class="btn btn-success" id="hsj-plantao-gravar">Liberar e arquivar passagem</button><p id="hsj-plantao-status" role="status"></p></section><section class="hsj-bloco"><h3>Histórico de passagens anteriores</h3><label>Mês <input type="month" id="hsj-plantao-mes"></label> <button class="btn" id="hsj-plantao-consultar">Consultar</button> <button type="button" class="btn btn-success" id="hsj-plantao-imprimir-historico">Imprimir passagem marcada (A4)</button><p class="hsj-help">Histórico a partir desta atualização; registros antigos não são inventados.</p><div id="hsj-plantao-historico"></div></section>';
 const $=id=>d.getElementById(id),period=()=>{let z=new Date();return z.getFullYear()+'-'+String(z.getMonth()+1).padStart(2,'0')};
 $('hsj-plantao-mes').value=period();
 const refMonth=m=>doc(w.db,'hospital','passagens_plantao_'+m.replace('-','_'));
@@ -35,8 +35,28 @@ return {ocupacao,admSetorial,admissoes:adm.length,altas:altas.length,obitos:obit
 function table(headers,rows){return '<div style="overflow:auto"><table><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}
 function summary(s){const stats=[['Internos',s.ocupacao.reduce((n,x)=>n+x.internos,0)],['Admissões hospitalares',s.admissoes],['Altas hospitalares',s.altas],['Óbitos',s.obitos],['Transferências internas',s.internas],['Altas UTI',s.altasUti]];return '<div class="hsj-nums">'+stats.map(x=>'<div class="hsj-num">'+esc(x[0])+'<b>'+esc(x[1])+'</b></div>').join('')+'</div><h4 style="margin:14px 0 5px">Internos por setor</h4>'+table(['Setor','Internos'],s.ocupacao.map(x=>[x.nome,x.internos]))+'<h4 style="margin:14px 0 5px">Admissões por setor, inclusive transferências internas</h4>'+table(['Setor','Admissões'],s.admSetorial.map(x=>[x.nome,x.total]))}
 function transfers(s){return '<h3>Transferências pendentes ('+s.pendentes.length+')</h3>'+(s.pendentes.length?table(['Paciente','Prontuário','Origem + leito','Destino','Situação','Pendências','DUSV','Data da solicitação'],s.pendentes.map(x=>[x.paciente,x.atendimento,x.origemSetor&&x.origemLeito?x.origemSetor+' · Leito '+x.origemLeito:'Não registrado',x.destino,x.status,x.pendencias||'Não informado',x.dusv||'—',x.data||'—'])):'<p>Nenhuma transferência pendente.</p>')}
-function refresh(){if(!root.classList.contains('active'))return;let s=calculate({setoresData:w.setoresData,movimentacoesHistorico:w.movimentacoesHistorico,transferenciasAtivas:w.transferenciasAtivas},Date.now()-12*3600000,Date.now());$('hsj-plantao-resumo').innerHTML='<h3>Resumo atual</h3><p class="hsj-help">Movimentações das últimas 12 horas (prévia). Ao liberar, o período parte do último fechamento registrado no mês.</p>'+summary(s);$('hsj-plantao-pendentes').innerHTML=transfers(s)}
+function refresh(){if(!root.classList.contains('active'))return;showAccumulated();let s=calculate({setoresData:w.setoresData,movimentacoesHistorico:w.movimentacoesHistorico,transferenciasAtivas:w.transferenciasAtivas},Date.now()-12*3600000,Date.now());$('hsj-plantao-resumo').innerHTML='<h3>Resumo atual</h3><p class="hsj-help">Movimentações das últimas 12 horas (prévia). Ao liberar, o período parte do último fechamento registrado no mês.</p>'+summary(s);$('hsj-plantao-pendentes').innerHTML=transfers(s)}
 let passagemHistoricoSelecionada=null;
+const localDay=()=>{
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Maceio',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+ const o={};parts.forEach(x=>o[x.type]=x.value);return o.year+'-'+o.month+'-'+o.day;
+};
+let ultimoAcumulado={dia:'',registro:null,consultado:false};
+function showAccumulated(){
+ const panel=$('hsj-plantao-acumulado-dia');
+ if(!panel)return;
+ const day=localDay(),record=ultimoAcumulado.dia===day?ultimoAcumulado.registro:null;
+ const label=day.split('-').reverse().join('/');
+ if(!record){
+  panel.innerHTML='<h3>Admissões de '+esc(label)+' · 00h00–23h59</h3><div class="hsj-nums"><div class="hsj-num">Acumulado liberado<b>0</b></div></div><p class="hsj-help">Novo dia: nenhuma passagem liberada ainda. O acumulado permanece em zero até a primeira liberação, sem alterar o histórico de ontem.</p>';
+  return;
+ }
+ const count=Number(record.resumo?.admissoesDia);
+ const known=Number.isFinite(count)&&count>=0;
+ const release=display(record.criadoEm);
+ const from=record.resumo?.inicioDia?display(record.resumo.inicioDia):'00h00';
+ panel.innerHTML='<h3>Admissões de '+esc(label)+' · 00h00–23h59</h3><div class="hsj-nums"><div class="hsj-num">Admissões acumuladas até a última liberação<b>'+(known?esc(count):'N/D')+'</b></div><div class="hsj-num">Admissões nesta passagem<b>'+esc(record.resumo?.admissoes??'N/D')+'</b></div></div><p class="hsj-help">Janela diária: '+esc(from)+' até '+esc(release)+'. Última liberação: '+esc(release)+'. A contagem só muda após outra liberação. A coluna da passagem utiliza a janela desde o fechamento anterior.</p>';
+}
 async function read(){
  const mes=$('hsj-plantao-mes').value,host=$('hsj-plantao-historico');
  if(!/^\d{4}-\d{2}$/.test(mes))return;
@@ -48,6 +68,11 @@ async function read(){
   if(snap.metadata?.fromCache)throw Error('Servidor não confirmou a consulta');
   const rows=Array.isArray(snap.data()?.registros)?snap.data().registros:[];
   const ordered=rows.slice().reverse();
+  const today=localDay();
+  // Apenas liberações do dia civil corrente contribuem para o acumulado.
+  const todays=ordered.filter(x=>String(x.resumo?.dataDiaLocal||'')===today);
+  ultimoAcumulado={dia:today,registro:todays[0]||null,consultado:true};
+  showAccumulated();
   host.innerHTML=ordered.length?ordered.map((x,i)=>
    '<div style="display:flex;align-items:flex-start;gap:10px;border-top:1px solid #cbd5e1;padding:12px 0">' +
    '<input type="radio" name="hsj-selecionar-plantao" value="'+i+'" aria-label="Selecionar passagem de '+esc(display(x.criadoEm))+' para impressão" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;cursor:pointer">' +
@@ -79,7 +104,7 @@ async function read(){
     input.checked=true;passagemHistoricoSelecionada=ordered[Number(input.value)];
    }
   });
- }catch(e){host.textContent='Histórico indisponível: '+String(e.message||e)}
+ }catch(e){host.textContent='Histórico indisponível: '+String(e.message||e);$('hsj-plantao-acumulado-dia').innerHTML='<h3>Admissões do dia</h3><p class="hsj-help">Não foi possível consultar a última liberação. O acumulado não está disponível até a conexão ser restabelecida.</p>'}
 }
 
 function printRecord(item){
@@ -114,6 +139,7 @@ function printRecord(item){
   const content='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Passagem de plantão NIR - '+esc(data)+'</title><style>'+
   '@page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}html,body{padding:0;margin:0;background:white;color:#182638;font-family:Arial,sans-serif;font-size:9pt;line-height:1.2}h1{font-size:15pt;margin:0;color:#123f69}h2{font-size:10pt;margin:8px 0 4px;color:#123f69}h3,h4{font-size:9pt;margin:6px 0 3px}header{border-bottom:2px solid #123f69;padding-bottom:5px;margin-bottom:6px}p{margin:4px 0}.dados{font-size:9pt}.grade{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:7px 0}.kpi{padding:5px;border:1px solid #ced8e3;border-radius:4px}.kpi b{display:block;font-size:12pt}table{width:100%;border-collapse:collapse;font-size:8pt}th,td{border:1px solid #dbe2eb;text-align:left;vertical-align:top;padding:3px 4px;overflow-wrap:anywhere}th{background:#f1f5f9}.resumo-setores{display:grid;grid-template-columns:1fr 1fr;gap:9px}.obs{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #dbe2eb;padding:7px;min-height:22px}.rodape{border-top:1px solid #cbd5e1;margin-top:7px;padding-top:5px;color:#475569;font-size:7.5pt}tr{break-inside:avoid}.compacto table{font-size:7.2pt}.compacto td,.compacto th{padding:2px 3px}.compacto .grade{gap:3px}.compacto .kpi{padding:3px}.resumo-setores+h2+div{overflow:visible!important}.resumo-setores+h2+div table{table-layout:fixed;width:100%}.resumo-setores+h2+div th:nth-child(1),.resumo-setores+h2+div td:nth-child(1){width:21%}.resumo-setores+h2+div th:nth-child(2),.resumo-setores+h2+div td:nth-child(2){width:20%}.resumo-setores+h2+div th:nth-child(3),.resumo-setores+h2+div td:nth-child(3){width:16%}.resumo-setores+h2+div th:nth-child(4),.resumo-setores+h2+div td:nth-child(4){width:15%}.resumo-setores+h2+div th:nth-child(5),.resumo-setores+h2+div td:nth-child(5){width:20%}.resumo-setores+h2+div th:nth-child(6),.resumo-setores+h2+div td:nth-child(6){width:8%;white-space:nowrap!important;overflow-wrap:normal!important;word-break:keep-all!important;writing-mode:horizontal-tb!important;text-align:center!important;padding-left:1px!important;padding-right:1px!important}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'+
   '</style></head><body class="'+compacto+'"><header><div style="display:flex;align-items:center;gap:8px"><img src="./sigma-mark.svg" alt="SIGMA" style="width:35px;height:35px;object-fit:contain"><div><h1>SIGMA · Hospital São José</h1><strong>NIR — PASSAGEM DE PLANTÃO</strong></div></div><div class="dados">Liberada por: <b>'+responsavel+'</b> · Data e hora: '+esc(data)+'</div><div>Período: '+esc(inicio)+' até '+esc(data)+'</div></header>'+
+  '<div style="border:1px solid #bdcfe0;padding:6px;margin-bottom:6px"><strong>ADMISSÕES DO DIA (00h00 até esta liberação): '+esc(Number.isFinite(Number(resumo.admissoesDia))&&resumo.dataDiaLocal?resumo.admissoesDia:'N/D')+'</strong><br><small>Data: '+esc(resumo.dataDiaLocal||'Não registrada')+' · Liberação: '+esc(data)+' · Admissões apenas desta passagem: '+esc(resumo.admissoes)+'</small></div>'+
   '<div class="grade">'+[['Internos',resumo.ocupacao.reduce((n,x)=>n+x.internos,0)],['Admissões',resumo.admissoes],['Altas',resumo.altas],['Óbitos',resumo.obitos]].map(x=>'<div class="kpi">'+esc(x[0])+'<b>'+esc(x[1])+'</b></div>').join('')+'</div>'+
   '<div class="resumo-setores"><section><h2>Internos por setor</h2>'+table(['Setor','Total'],resumo.ocupacao.map(x=>[x.nome,x.internos]))+'</section><section><h2>Admissões por setor</h2>'+table(['Setor','Total'],resumo.admSetorial.map(x=>[x.nome,x.total]))+'</section></div>'+
   '<h2>Transferências pendentes ('+numPendentes+')</h2>'+(numPendentes?table(['Paciente / prontuário','Origem + leito','Destino','Situação','Pendências','DUSV'],resumo.pendentes.map(x=>[x.paciente+' / '+x.atendimento,lookupNow(x),x.destino,x.status,x.pendencias||'—',x.dusv||'—'])):'<p>Nenhuma transferência pendente.</p>')+
@@ -159,7 +185,7 @@ btn.disabled=true;status.textContent='Salvando no servidor...';
 try{
  const snap=await getDoc(doc(w.db,'hospital','dados'));if(!snap.exists()||snap.metadata?.fromCache)throw Error('Dados principais sem confirmação do servidor');
  const state=snap.data();if(!Array.isArray(state.setoresData))throw Error('Setores inválidos');
- const now=new Date(),iso=now.toISOString(),mes=iso.slice(0,7),archive=refMonth(mes);
+ const now=new Date(),iso=now.toISOString(),mes=localDay().slice(0,7),archive=refMonth(mes);
  if(typeof w.hsjGravarPassagemPlantaoV2!=='function')throw Error('Módulo de gravação indisponível; atualize a página.');
  const result=await w.hsjGravarPassagemPlantaoV2({
   mes, responsavel:autor, observacoes,
