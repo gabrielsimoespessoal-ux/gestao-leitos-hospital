@@ -236,7 +236,7 @@
         // Atualização pontual do andamento, sem modificar leitos ou pacientes.
         window.hsjAtualizarStatusTransferenciaAtomico=async function(raw){
           const a=JSON.parse(JSON.stringify(raw||{}));
-          const permitidos=['Solicitação Pendente','Vaga Solicitada','Vaga Liberada','Aguardando liberação'];
+          const permitidos=['Solicitação Pendente','Vaga Solicitada','Vaga Liberada','Em Regulação','Aguardando liberação'];
           if(!permitidos.includes(a.status))throw Error('Status inválido.');
           const ref=doc(db,'hospital','dados');
           return runTransaction(db,async tx=>{
