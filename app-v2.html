@@ -1154,8 +1154,15 @@
                     admissoes:admissions.length,altas:discharges.length,obitos:deaths.length,internas:internal.length,
                     altasUti:internal.filter(m=>normalize(m.origem).includes('uti')&&!normalize(m.destino).includes('uti')).length,
                     pendentes:a.transferencias.map(t=>{
-                      const matches=setores.flatMap(s=>(s.leitos||[]).filter(l=>l.status==='ocupado'&&String(l.prontuario||'')===String(t.atendimento||'')).map(l=>({setor:s.nome,leito:String(l.n)})));
-                      const pos=matches.length===1?matches[0]:null;
+                      const normPr=x=>String(x??'').trim().replace(/[^0-9A-Za-z]/g,'').toUpperCase();
+                      const key=normPr(t.atendimento);
+                      const matches=key?setores.flatMap(s=>(s.leitos||[])
+                        .filter(l=>['ocupado','reservado'].includes(l.status)&&normPr(l.prontuario)===key)
+                        .map(l=>({setor:s.nome,leito:String(l.n),status:l.status}))):[];
+                      // Preferir a acomodação ocupada; não assumir local em cadastros ambíguos.
+                      const occupied=matches.filter(x=>x.status==='ocupado');
+                      const valid=occupied.length===1?occupied:(occupied.length===0&&matches.length===1?matches:[]);
+                      const pos=valid.length===1?valid[0]:null;
                       return {paciente:String(t.paciente||''),atendimento:String(t.atendimento||''),
                         origemSetor:pos?.setor||'',origemLeito:pos?.leito||'',
                         destino:String(t.destino||''),status:String(t.status||''),pendencias:String(t.pendencias||''),dusv:String(t.dusv||''),data:String(t.dataIso||t.data||'')};
