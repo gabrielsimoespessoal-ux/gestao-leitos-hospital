@@ -1153,6 +1153,17 @@
                 });
                 const internal = moves.filter(m=>normalize(m.acao).includes('transferencia interna') && normalize(m.origem)!==normalize(m.destino));
                 const admissions = moves.filter(m=>normalize(m.acao)==='admissao');
+                // Acumulado do dia civil de Maceió: 00h00 até o instante da liberação.
+                // A janela do plantão continua independente (último fechamento -> liberação).
+                const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Maceio',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
+                const local={};parts.forEach(p=>{local[p.type]=p.value});
+                const diaLocal=local.year+'-'+local.month+'-'+local.day;
+                const inicioDiaMs=Date.parse(diaLocal+'T00:00:00-03:00');
+                const admissoesNoDia=a.movimentacoes.filter(m=>{
+                  if(m.contabilizarIndicadores===false || normalize(m.acao)!=='admissao')return false;
+                  const momento=new Date(m.dataIso||m.dataDesfechoObj||'').getTime();
+                  return Number.isFinite(momento)&&momento>=inicioDiaMs&&momento<=nowMs;
+                });
                 const deaths = moves.filter(m=>normalize(m.acao).includes('obito'));
                 const discharges = moves.filter(m=>{
                    const v=normalize(m.acao);
@@ -1163,6 +1174,11 @@
                     admSetorial:occupancy.map(s=>({nome:s.nome,total:admissions.filter(m=>normalize(m.destino)===normalize(s.nome)||normalize(m.setor).startsWith(normalize(s.nome))).length+internal.filter(m=>normalize(m.destino)===normalize(s.nome)).length})),
                     admissoes:admissions.length,altas:discharges.length,obitos:deaths.length,internas:internal.length,
                     altasUti:internal.filter(m=>normalize(m.origem).includes('uti')&&!normalize(m.destino).includes('uti')).length,
+                    admissoesDia:admissoesNoDia.length,
+                    inicioDia: new Date(inicioDiaMs).toISOString(),
+                    fimDiaApurado:now.toISOString(),
+                    dataDiaLocal:diaLocal,
+                    admissoesJanela:admissions.length,
                     pendentes:a.transferencias.map(t=>{
                       const normPr=x=>String(x??'').trim().replace(/[^0-9A-Za-z]/g,'').toUpperCase();
                       const key=normPr(t.atendimento);
