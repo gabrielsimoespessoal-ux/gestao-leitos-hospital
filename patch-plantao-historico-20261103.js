@@ -57,6 +57,19 @@ async function read(){
    '<p style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(x.observacoes||'Sem observações')+'</p></details></div>'
   ).join(''):'Nenhuma passagem registrada neste mês.';
   host.querySelectorAll('input[name="hsj-selecionar-plantao"]').forEach(input=>{
+   const clearSelection=()=>{
+    input.checked=false;
+    passagemHistoricoSelecionada=null;
+    $('hsj-plantao-status').textContent='Nenhuma passagem selecionada para impressão.';
+   };
+   input.addEventListener('pointerdown',()=>{input.dataset.wasChecked=input.checked?'1':'0'});
+   input.addEventListener('click',()=>{
+    if(input.dataset.wasChecked==='1')clearSelection();
+    delete input.dataset.wasChecked;
+   });
+   input.addEventListener('keydown',e=>{
+    if(e.key===' '&&input.checked){e.preventDefault();clearSelection()}
+   });
    input.addEventListener('change',()=>{
     passagemHistoricoSelecionada=ordered[Number(input.value)]||null;
     $('hsj-plantao-status').textContent=passagemHistoricoSelecionada?
