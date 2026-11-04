@@ -96,8 +96,10 @@ function boot(){
  input.addEventListener('input',refresh);select.addEventListener('change',refresh);
  // Quando o painel for reaberto, a pesquisa transitória não deve ocultar os leitos.
  d.querySelectorAll('nav.subnav .nav-item').forEach(item=>item.addEventListener('click',()=>{
-   if(!d.getElementById('painel')?.classList.contains('active'))return;
-   input.value='';select.value='';refresh();
+   w.setTimeout(()=>{
+     if(!d.getElementById('painel')?.classList.contains('active'))return;
+     input.value='';select.value='';refresh();
+   },50);
  }));
  w.setTimeout(()=>{clearUnexpected();refresh()},700);
  d.getElementById('hsj-leitos-limpar').onclick=()=>{input.value='';select.value='';refresh()};
