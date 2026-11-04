@@ -6,13 +6,13 @@ function init(){
  let w,d;try{w=frame.contentWindow;d=frame.contentDocument}catch{return}
  if(!w||!d||!w.hsjAuthReady||!Array.isArray(w.movimentacoesHistorico))return;
  if(installed&&d.getElementById('hsj-export-ocupacao-outubro'))return;
- const target=d.getElementById('historico-geral')||d.getElementById('indicadores');
+ const target=d.getElementById('indicadores')||d.getElementById('historico-geral');
  if(!target)return;
  installed=true;
  const bar=d.createElement('div');bar.id='hsj-export-ocupacao-outubro';
  bar.style.cssText='padding:12px;margin:12px 0;border:1px solid #b7d4e7;background:#eef7fc;border-radius:9px;display:flex;gap:10px;align-items:center;flex-wrap:wrap';
  const btn=d.createElement('button');btn.type='button';btn.className='btn';btn.textContent='Exportar histórico para taxa mensal — outubro/2026';
- const info=d.createElement('small');info.textContent='Exportação de leitura, sem nomes, CPF ou prontuários. Não altera dados.';
+ const info=d.createElement('small');info.textContent='Exportação de leitura, sem nomes, CPF ou prontuários. Não altera dados. A taxa mensal permanece N/D até validar pacientes-dia e leitos-dia.';
  bar.append(btn,info);
  target.prepend(bar);
  btn.onclick=()=>{
@@ -24,7 +24,7 @@ function init(){
    const v=e.dataIso||e.dataDesfechoObj||e.data||'';
    const s=String(v);
    if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
-   const m=s.match(/^(\d{2})\\/(\d{2})\\/(\d{4})/);
+   const m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
    return m?m[3]+'-'+m[2]+'-'+m[1]:'';
   }
   const events=[];
