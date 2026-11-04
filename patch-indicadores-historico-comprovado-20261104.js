@@ -61,6 +61,7 @@ async function load(w,force=false){
  cache=snap.exists()&&Array.isArray(snap.data().periodos)?snap.data().periodos:[];
  w.__hsjHistoricOccupancyVerified=cache;
  lastLoad=Date.now();error='';
+ if(typeof w.renderizarIndicadores==='function')w.renderizarIndicadores();
 }
 function render(w,d){
  const box=ui(w,d);if(!box)return;
