@@ -12,7 +12,7 @@ if(w.__hsjPlantaoHistorico20261103)return;w.__hsjPlantaoHistorico20261103=true;m
 const {doc,getDoc,runTransaction}=w.firebaseModules,root=d.getElementById('plantao');
 const style=d.createElement('style');style.textContent='#plantao .hsj-bloco{background:white;border:1px solid #cbd5e1;padding:15px;border-radius:10px;margin:12px 0}#plantao table{width:100%;border-collapse:collapse;font-size:13px}#plantao td,#plantao th{padding:8px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}#plantao input,#plantao textarea{padding:10px;border:1px solid #94a3b8;border-radius:7px;max-width:100%}#plantao .hsj-nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}#plantao .hsj-num{padding:12px;background:#f1f5f9;border-radius:8px}#plantao .hsj-num b{font-size:24px;display:block;color:#075985}#plantao h3{margin-bottom:12px;color:#123f69}#plantao .hsj-help{color:#64748b;font-size:12px;margin:8px 0}';
 d.head.appendChild(style);
-root.innerHTML='<div class="page-header"><div><h2>Passagem de plantão — NIR</h2><p>Resumo dos setores, movimentações e transferências pendentes.</p></div></div><section class="hsj-bloco" id="hsj-plantao-resumo"></section><section class="hsj-bloco" id="hsj-plantao-pendentes"></section><section class="hsj-bloco"><h3>Registrar e liberar passagem</h3><label><strong>Nome completo de quem libera *</strong></label><div><input id="hsj-plantao-autor" maxlength="120" style="width:min(480px,100%)" placeholder="Nome do profissional responsável"></div><p class="hsj-help">O login é compartilhado; o nome é obrigatório.</p><label><strong>Observações para o próximo plantão</strong></label><div><textarea id="hsj-plantao-obs" rows="5" maxlength="12000" style="width:100%" placeholder="Intercorrências, avisos, prioridades..."></textarea></div><p class="hsj-help">O relatório será arquivado como retrato do momento e não alterará leitos ou indicadores.</p><button class="btn btn-success" id="hsj-plantao-gravar">Liberar e arquivar passagem</button><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px"><label for="hsj-plantao-data-impressao"><strong>Data da passagem para imprimir</strong></label><input type="date" id="hsj-plantao-data-impressao" aria-label="Data da passagem"><button type="button" class="btn" id="hsj-plantao-buscar-impressao">Buscar passagens do dia</button><select id="hsj-plantao-registro-impressao" aria-label="Selecione a passagem arquivada" style="min-width:240px"><option value="">Selecione o dia primeiro</option></select><button type="button" class="btn" id="hsj-plantao-imprimir">Imprimir passagem selecionada (A4)</button></div><p id="hsj-plantao-status" role="status"></p></section><section class="hsj-bloco"><h3>Histórico de passagens anteriores</h3><label>Mês <input type="month" id="hsj-plantao-mes"></label> <button class="btn" id="hsj-plantao-consultar">Consultar</button> <button type="button" class="btn btn-success" id="hsj-plantao-imprimir-historico">Imprimir passagem marcada (A4)</button><p class="hsj-help">Histórico a partir desta atualização; registros antigos não são inventados.</p><div id="hsj-plantao-historico"></div></section>';
+root.innerHTML='<div class="page-header"><div><h2>Passagem de plantão — NIR</h2><p>Resumo dos setores, movimentações e transferências pendentes.</p></div></div><section class="hsj-bloco" id="hsj-plantao-resumo"></section><section class="hsj-bloco" id="hsj-plantao-pendentes"></section><section class="hsj-bloco"><h3>Registrar e liberar passagem</h3><label><strong>Nome completo de quem libera *</strong></label><div><input id="hsj-plantao-autor" maxlength="120" style="width:min(480px,100%)" placeholder="Nome do profissional responsável"></div><p class="hsj-help">O login é compartilhado; o nome é obrigatório.</p><label><strong>Observações para o próximo plantão</strong></label><div><textarea id="hsj-plantao-obs" rows="5" maxlength="12000" style="width:100%" placeholder="Intercorrências, avisos, prioridades..."></textarea></div><p class="hsj-help">O relatório será arquivado como retrato do momento e não alterará leitos ou indicadores.</p><button class="btn btn-success" id="hsj-plantao-gravar">Liberar e arquivar passagem</button><p id="hsj-plantao-status" role="status"></p></section><section class="hsj-bloco"><h3>Histórico de passagens anteriores</h3><label>Mês <input type="month" id="hsj-plantao-mes"></label> <button class="btn" id="hsj-plantao-consultar">Consultar</button> <button type="button" class="btn btn-success" id="hsj-plantao-imprimir-historico">Imprimir passagem marcada (A4)</button><p class="hsj-help">Histórico a partir desta atualização; registros antigos não são inventados.</p><div id="hsj-plantao-historico"></div></section>';
 const $=id=>d.getElementById(id),period=()=>{let z=new Date();return z.getFullYear()+'-'+String(z.getMonth()+1).padStart(2,'0')};
 $('hsj-plantao-mes').value=period();
 const refMonth=m=>doc(w.db,'hospital','passagens_plantao_'+m.replace('-','_'));
@@ -69,29 +69,6 @@ async function read(){
  }catch(e){host.textContent='Histórico indisponível: '+String(e.message||e)}
 }
 
-let passagensParaImpressao=[];
-$('hsj-plantao-data-impressao').value=new Date().toLocaleDateString('en-CA');
-async function buscarPassagensDoDia(){
- const data=$('hsj-plantao-data-impressao').value,status=$('hsj-plantao-status'),selector=$('hsj-plantao-registro-impressao');
- passagensParaImpressao=[];
- selector.replaceChildren(new Option('Buscando passagens...', ''));
- if(!/^\d{4}-\d{2}-\d{2}$/.test(data)){selector.replaceChildren(new Option('Selecione uma data válida',''));return}
- try{
-  const snap=await getDoc(refMonth(data.slice(0,7)));
-  if(snap.metadata?.fromCache)throw Error('Servidor não confirmou o histórico da data selecionada.');
-  const records=Array.isArray(snap.data()?.registros)?snap.data().registros:[];
-  // A data ISO da gravação é UTC; comparar o dia no fuso de Aracaju.
-  const localDay=iso=>{const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Maceio',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(iso));const get=k=>parts.find(p=>p.type===k)?.value||'';return get('year')+'-'+get('month')+'-'+get('day')};
-  passagensParaImpressao=records.filter(x=>x?.criadoEm&&localDay(x.criadoEm)===data).sort((a,b)=>String(a.criadoEm).localeCompare(String(b.criadoEm)));
-  selector.replaceChildren(new Option(passagensParaImpressao.length?'Selecione uma passagem ('+passagensParaImpressao.length+')':'Nenhuma passagem arquivada nesta data',''));
-  passagensParaImpressao.forEach((x,i)=>selector.add(new Option(display(x.criadoEm)+' — '+String(x.responsavel||'Sem responsável'),String(i))));
-  if(passagensParaImpressao.length===1)selector.value='0';
-  status.textContent=passagensParaImpressao.length?'Selecione a passagem e clique em imprimir.':'Nenhuma passagem encontrada na data selecionada.';
- }catch(e){selector.replaceChildren(new Option('Consulta indisponível',''));status.textContent='Falha na consulta: '+String(e.message||e)}
-}
-$('hsj-plantao-buscar-impressao').onclick=buscarPassagensDoDia;
-$('hsj-plantao-data-impressao').onchange=buscarPassagensDoDia;
-
 function printRecord(item){
   if(!item||!item.resumo)throw Error('Passagem arquivada inválida.');
   const data=display(item.criadoEm),inicio=display(item.inicio),responsavel=esc(item.responsavel||'');
@@ -101,15 +78,15 @@ function printRecord(item){
   const compacto=numPendentes>8?'compacto':'';
   const content='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Passagem de plantão NIR - '+esc(data)+'</title><style>'+
   '@page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}html,body{padding:0;margin:0;background:white;color:#182638;font-family:Arial,sans-serif;font-size:9pt;line-height:1.2}h1{font-size:15pt;margin:0;color:#123f69}h2{font-size:10pt;margin:8px 0 4px;color:#123f69}h3,h4{font-size:9pt;margin:6px 0 3px}header{border-bottom:2px solid #123f69;padding-bottom:5px;margin-bottom:6px}p{margin:4px 0}.dados{font-size:9pt}.grade{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:7px 0}.kpi{padding:5px;border:1px solid #ced8e3;border-radius:4px}.kpi b{display:block;font-size:12pt}table{width:100%;border-collapse:collapse;font-size:8pt}th,td{border:1px solid #dbe2eb;text-align:left;vertical-align:top;padding:3px 4px;overflow-wrap:anywhere}th{background:#f1f5f9}.resumo-setores{display:grid;grid-template-columns:1fr 1fr;gap:9px}.obs{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #dbe2eb;padding:7px;min-height:22px}.rodape{border-top:1px solid #cbd5e1;margin-top:7px;padding-top:5px;color:#475569;font-size:7.5pt}tr{break-inside:avoid}.compacto table{font-size:7.2pt}.compacto td,.compacto th{padding:2px 3px}.compacto .grade{gap:3px}.compacto .kpi{padding:3px}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'+
-  '</style></head><body class="'+compacto+'"><header><h1>Hospital São José · NIR</h1><strong>PASSAGEM DE PLANTÃO</strong><div class="dados">Liberada por: <b>'+responsavel+'</b> · Data e hora: '+esc(data)+'</div><div>Período: '+esc(inicio)+' até '+esc(data)+'</div></header>'+
+  '</style></head><body class="'+compacto+'"><header><div style="display:flex;align-items:center;gap:8px"><img src="./sigma-mark.svg" alt="SIGMA" style="width:35px;height:35px;object-fit:contain"><div><h1>SIGMA · Hospital São José</h1><strong>NIR — PASSAGEM DE PLANTÃO</strong></div></div><div class="dados">Liberada por: <b>'+responsavel+'</b> · Data e hora: '+esc(data)+'</div><div>Período: '+esc(inicio)+' até '+esc(data)+'</div></header>'+
   '<div class="grade">'+[['Internos',resumo.ocupacao.reduce((n,x)=>n+x.internos,0)],['Admissões',resumo.admissoes],['Altas',resumo.altas],['Óbitos',resumo.obitos]].map(x=>'<div class="kpi">'+esc(x[0])+'<b>'+esc(x[1])+'</b></div>').join('')+'</div>'+
   '<div class="resumo-setores"><section><h2>Internos por setor</h2>'+table(['Setor','Total'],resumo.ocupacao.map(x=>[x.nome,x.internos]))+'</section><section><h2>Admissões por setor</h2>'+table(['Setor','Total'],resumo.admSetorial.map(x=>[x.nome,x.total]))+'</section></div>'+
   '<h2>Transferências pendentes ('+numPendentes+')</h2>'+(numPendentes?table(['Paciente / prontuário','Origem + leito','Destino','Situação','Pendências','DUSV'],resumo.pendentes.map(x=>[x.paciente+' / '+x.atendimento,x.origemSetor&&x.origemLeito?x.origemSetor+' · Leito '+x.origemLeito:'Não registrado',x.destino,x.status,x.pendencias||'—',x.dusv||'—'])):'<p>Nenhuma transferência pendente.</p>')+
   '<h2>Observações do plantão</h2><div class="obs">'+esc(item.observacoes||'Sem observações registradas')+'</div><div class="rodape">Registro arquivado · Transferências internas: '+esc(resumo.internas)+' · Saídas da UTI: '+esc(resumo.altasUti)+'. Documento gerado a partir da passagem gravada.</div></body></html>';
   return content;
 }
-$('hsj-plantao-imprimir').onclick=async()=>{
- const btn=$('hsj-plantao-imprimir'),status=$('hsj-plantao-status');
+$('hsj-plantao-imprimir-historico').onclick=async()=>{
+ const btn=$('hsj-plantao-imprimir-historico'),status=$('hsj-plantao-status');
  // Abrir diretamente no clique: abertura posterior a await costuma ser bloqueada pelo navegador.
  const popup=w.open('','_blank');
  if(!popup){
@@ -121,10 +98,8 @@ $('hsj-plantao-imprimir').onclick=async()=>{
  popup.document.close();
  btn.disabled=true;status.textContent='Preparando relatório A4...';
  try{
-  const selected=$('hsj-plantao-registro-impressao').value;
-  const selectedRecord=passagemHistoricoSelecionada || (/^\d+$/.test(selected)?passagensParaImpressao[Number(selected)]:null);
-  if(!selectedRecord)throw Error('Marque a bolinha ao lado de uma passagem no histórico ou selecione uma passagem do dia.');
-  const html=printRecord(selectedRecord);
+  if(!passagemHistoricoSelecionada)throw Error('Marque a bolinha ao lado da passagem no histórico antes de imprimir.');
+  const html=printRecord(passagemHistoricoSelecionada).replace('src="./sigma-mark.svg"','src="'+new URL('sigma-mark.svg',d.baseURI).href+'"');
   if(popup.closed)throw Error('A janela de impressão foi fechada.');
   popup.document.open();popup.document.write(html);popup.document.close();
   popup.focus();
@@ -138,10 +113,7 @@ $('hsj-plantao-imprimir').onclick=async()=>{
  }finally{btn.disabled=false}
 };
 $('hsj-plantao-consultar').onclick=read;
-$('hsj-plantao-imprimir-historico').onclick=()=>{
- if(!passagemHistoricoSelecionada){$('hsj-plantao-status').textContent='Marque primeiro a bolinha da passagem no histórico.';return}
- $('hsj-plantao-imprimir').click();
-};
+
 $('hsj-plantao-gravar').onclick=async()=>{
 const autor=$('hsj-plantao-autor').value.trim().replace(/\s+/g,' '),observacoes=$('hsj-plantao-obs').value.trim(),status=$('hsj-plantao-status'),btn=$('hsj-plantao-gravar');
 if(autor.length<3){status.textContent='Informe obrigatoriamente o nome completo de quem libera.';return}
@@ -161,7 +133,7 @@ try{
   revisaoFonte:Number(state._meta?.revision||0)
  });
  if(!result?.ok)throw Error('Servidor não confirmou o arquivamento.');
-status.textContent='Passagem arquivada com sucesso em '+display(iso);$('hsj-plantao-data-impressao').value=iso.slice(0,10);await buscarPassagensDoDia();$('hsj-plantao-obs').value='';$('hsj-plantao-mes').value=mes;await read();refresh()
+status.textContent='Passagem arquivada com sucesso em '+display(iso);$('hsj-plantao-obs').value='';$('hsj-plantao-mes').value=mes;await read();refresh()
 }catch(e){status.textContent='Falha ao salvar: '+String(e.message||e)}
 finally{btn.disabled=false}
 };
