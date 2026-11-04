@@ -1,6 +1,19 @@
 (()=>{
 'use strict';
 const frame=document.getElementById('appFrame');if(!frame)return;
+const shortcut=document.createElement('button');
+shortcut.type='button';shortcut.id='hsj-export-sigma-fixed';
+shortcut.textContent='⬇ Exportar histórico outubro/2026';
+shortcut.title='Exportação de leitura para cálculo de ocupação mensal';
+shortcut.style.cssText='position:fixed;right:18px;bottom:18px;z-index:2147483000;background:#075c91;color:#fff;border:1px solid white;border-radius:9px;padding:12px 16px;font:600 13px Arial,sans-serif;box-shadow:0 3px 15px #0004;cursor:pointer';
+document.body.appendChild(shortcut);
+shortcut.onclick=()=>{
+ init();
+ const doc=frame.contentDocument;
+ const button=doc?.querySelector('#hsj-export-ocupacao-outubro button');
+ if(button)button.click();
+ else alert('Exportação indisponível: confirme seu login no Firebase e recarregue o SIGMA.');
+};
 let installed=false;
 function init(){
  let w,d;try{w=frame.contentWindow;d=frame.contentDocument}catch{return}
