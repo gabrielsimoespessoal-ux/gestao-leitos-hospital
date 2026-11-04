@@ -55,9 +55,18 @@ function boot(){
  d.head.appendChild(style);
  const painel=d.getElementById('painel'),grid=d.getElementById('painel-setores-detalhado');
  const controls=d.createElement('div');controls.id='hsj-leitos-filtros-compactos';
- controls.innerHTML='<input id="hsj-leitos-pesquisa" type="search" placeholder="Buscar setor ou leito" aria-label="Buscar setor ou leito"><select id="hsj-leitos-setor" aria-label="Selecionar setor"><option value="">Todos os setores</option></select><button type="button" id="hsj-leitos-limpar">Limpar</button>';
+ controls.innerHTML='<input id="hsj-leitos-pesquisa" type="search" name="sigma_consulta_setor_leito" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar setor ou leito" aria-label="Buscar setor ou leito"><select id="hsj-leitos-setor" aria-label="Selecionar setor"><option value="">Todos os setores</option></select><button type="button" id="hsj-leitos-limpar">Limpar</button>';
  grid.before(controls);
  const input=d.getElementById('hsj-leitos-pesquisa'),select=d.getElementById('hsj-leitos-setor');
+ // Impede preenchimento indevido por gerenciadores de senhas ou pelo login.
+ input.value='';input.defaultValue='';
+ input.setAttribute('autocomplete','off');
+ const clearUnexpected=()=>{
+   if(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.value.trim())){
+     input.value='';select.value='';refresh();
+   }
+ };
+ d.addEventListener('focusin',event=>{if(event.target===input)clearUnexpected()});
  let scheduled=false;
  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
  function refresh(){
@@ -67,6 +76,7 @@ function boot(){
   const selected=select.value;select.innerHTML='<option value="">Todos os setores</option>';
   [...new Set(options)].sort((a,b)=>a.localeCompare(b,'pt-BR')).forEach(x=>{const opt=d.createElement('option');opt.value=x;opt.textContent=x;select.appendChild(opt)});
   if(options.includes(selected))select.value=selected;
+  if(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.value.trim())) input.value='';
   const query=norm(input.value),sector=select.value;
   cards.forEach(c=>{
    const name=c.querySelector('.sector-title-row h3')?.textContent?.trim()||'';
@@ -84,6 +94,12 @@ function boot(){
  const queue=()=>{if(scheduled)return;scheduled=true;setTimeout(refresh,80)};
  new MutationObserver(queue).observe(grid,{childList:true});
  input.addEventListener('input',refresh);select.addEventListener('change',refresh);
+ // Quando o painel for reaberto, a pesquisa transitória não deve ocultar os leitos.
+ d.querySelectorAll('nav.subnav .nav-item').forEach(item=>item.addEventListener('click',()=>{
+   if(!d.getElementById('painel')?.classList.contains('active'))return;
+   input.value='';select.value='';refresh();
+ }));
+ w.setTimeout(()=>{clearUnexpected();refresh()},700);
  d.getElementById('hsj-leitos-limpar').onclick=()=>{input.value='';select.value='';refresh()};
  refresh();
 }
