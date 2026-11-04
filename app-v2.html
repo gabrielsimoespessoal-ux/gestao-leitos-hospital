@@ -3815,7 +3815,7 @@
 
             movimentacoesHistorico.forEach(function(m) {
                 if(m.contabilizarIndicadores===false) return;
-                var mData = m.dataDesfechoObj ? new Date(m.dataDesfechoObj) : new Date();
+                var mData = new Date(m.dataDesfechoObj || m.dataIso || m.data || '');
                 var dentroDoPeriodo = mData >= dataIni && mData <= dataFim;
                 if (!dentroDoPeriodo) return;
 
@@ -3870,7 +3870,7 @@
             });
 
             var totalMovsPeriodo = movimentacoesHistorico.filter(function(m) {
-                var dt = new Date(m.dataDesfechoObj || new Date());
+                var dt = new Date(m.dataDesfechoObj || m.dataIso || m.data || '');
                 return dt >= dataIni && dt <= dataFim;
             }).length;
 
