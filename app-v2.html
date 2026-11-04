@@ -247,6 +247,8 @@
             if(!item)throw Error('Solicitação não localizada. Atualize a página.');
             if(String(item.status)!==String(a.statusAnterior))throw Error('Status alterado em outro computador. Atualize antes de editar.');
             item.status=a.status;item.atualizadoEm=new Date().toISOString();
+            item.historicoStatus=Array.isArray(item.historicoStatus)?item.historicoStatus:[];
+            item.historicoStatus.push({dataIso:item.atualizadoEm,status:a.status,statusAnterior:a.statusAnterior,usuario:a.usuario||'usuario'});
             const rev=Number(state._meta?.revision||0);
             state._meta={...(state._meta||{}),revision:rev+1,previousRevision:rev,updatedAt:item.atualizadoEm,editor:a.usuario||'usuario'};
             tx.set(ref,state);return {ok:true,status:a.status};
@@ -294,7 +296,8 @@
               destino:a.destino,status:a.status,dusv:a.dusv,
               plataforma:a.plataforma,pendencias:a.pendencias,
               judicial:a.judicial,compulsoria:a.compulsoria,
-              atualizadoEm:iso
+              atualizadoEm:iso,
+              historicoStatus:existing?.historicoStatus||[{dataIso:iso,status:a.status,usuario:a.usuario||'usuario'}]
             };
             if(idx>=0)active[idx]=patient;else active.unshift(patient);
             data.transferenciasAtivas=active;
@@ -317,7 +320,7 @@
             const occupied=(state.setoresData||[]).some(s=>(s.leitos||[]).some(l=>String(l.prontuario||'')===String(a.pr)&&['ocupado','reservado'].includes(l.status)));
             if(!occupied)throw Error('Paciente não está vinculado a leito ativo. Atualize e confira.');
             const nasc=patient.nascimento||a.nascimento||'';
-            list.unshift({data:now.toLocaleString('pt-BR'),dataIso:iso,atendimento:a.pr,atendimentoNasc:'Pront: '+a.pr+' | Nasc: '+nasc,paciente:patient.nome||a.nome,perfil:(patient.perfil||a.perfil||'')+' ('+(patient.sexo||a.sexo||'')+')',destino:'A definir',status:'Solicitação Pendente',dusv:'NÃO',plataforma:'A definir',pendencias:'Definir destino e completar solicitação',judicial:'Judicial: NÃO',compulsoria:'Compulsória: NÃO',origemCadastro:'Painel de Leitos'});
+            list.unshift({data:now.toLocaleString('pt-BR'),dataIso:iso,atendimento:a.pr,atendimentoNasc:'Pront: '+a.pr+' | Nasc: '+nasc,paciente:patient.nome||a.nome,perfil:(patient.perfil||a.perfil||'')+' ('+(patient.sexo||a.sexo||'')+')',destino:'A definir',status:'Solicitação Pendente',dusv:'NÃO',plataforma:'A definir',pendencias:'Definir destino e completar solicitação',judicial:'Judicial: NÃO',compulsoria:'Compulsória: NÃO',origemCadastro:'Painel de Leitos',historicoStatus:[{dataIso:iso,status:'Solicitação Pendente',usuario:a.usuario||'usuario'}]});
             state.transferenciasAtivas=list;
             state._meta={...(state._meta||{}),revision:Number(state._meta?.revision||0)+1,previousRevision:Number(state._meta?.revision||0),updatedAt:iso,editor:a.usuario||'usuario',safeguards:'transferencia-pendente-atomica'};
             tx.set(ref,state);return {ok:true,jaExistia:false};
