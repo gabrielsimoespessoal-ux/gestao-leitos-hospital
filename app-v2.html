@@ -1153,7 +1153,13 @@
                     admSetorial:occupancy.map(s=>({nome:s.nome,total:admissions.filter(m=>normalize(m.destino)===normalize(s.nome)||normalize(m.setor).startsWith(normalize(s.nome))).length+internal.filter(m=>normalize(m.destino)===normalize(s.nome)).length})),
                     admissoes:admissions.length,altas:discharges.length,obitos:deaths.length,internas:internal.length,
                     altasUti:internal.filter(m=>normalize(m.origem).includes('uti')&&!normalize(m.destino).includes('uti')).length,
-                    pendentes:a.transferencias.map(t=>({paciente:String(t.paciente||''),atendimento:String(t.atendimento||''),destino:String(t.destino||''),status:String(t.status||''),pendencias:String(t.pendencias||''),dusv:String(t.dusv||''),data:String(t.dataIso||t.data||'')}))
+                    pendentes:a.transferencias.map(t=>{
+                      const matches=setores.flatMap(s=>(s.leitos||[]).filter(l=>l.status==='ocupado'&&String(l.prontuario||'')===String(t.atendimento||'')).map(l=>({setor:s.nome,leito:String(l.n)})));
+                      const pos=matches.length===1?matches[0]:null;
+                      return {paciente:String(t.paciente||''),atendimento:String(t.atendimento||''),
+                        origemSetor:pos?.setor||'',origemLeito:pos?.leito||'',
+                        destino:String(t.destino||''),status:String(t.status||''),pendencias:String(t.pendencias||''),dusv:String(t.dusv||''),data:String(t.dataIso||t.data||'')};
+                    })
                 };
                 const record={criadoEm:now.toISOString(),inicio:new Date(fromMs).toISOString(),responsavel:nome,
                   observacoes:String(a.observacoes||''),resumo:summary,revisaoFonte:Number(a.revisaoFonte||0)};
