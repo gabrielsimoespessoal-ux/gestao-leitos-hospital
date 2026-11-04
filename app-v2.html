@@ -299,7 +299,14 @@
               atualizadoEm:iso,
               historicoStatus:existing?.historicoStatus||[{dataIso:iso,status:a.status,usuario:a.usuario||'usuario'}]
             };
-            if(idx>=0)active[idx]=patient;else active.unshift(patient);
+            if(idx>=0){
+              const existingStatus=String(existing?.status||'');
+              if(existingStatus!==String(patient.status||'')){
+                patient.historicoStatus=Array.isArray(patient.historicoStatus)?patient.historicoStatus:[];
+                patient.historicoStatus.push({dataIso:iso,status:patient.status,statusAnterior:existingStatus,usuario:a.usuario||'usuario'});
+              }
+              active[idx]=patient;
+            }else active.unshift(patient);
             data.transferenciasAtivas=active;
             const rev=Number(data._meta?.revision||0);
             data._meta={...(data._meta||{}),revision:rev+1,previousRevision:rev,updatedAt:iso,editor:a.usuario||'usuario',safeguards:'transferencia-atomica-upsert'};
