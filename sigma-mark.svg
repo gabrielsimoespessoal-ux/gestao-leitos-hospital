@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260" role="img" aria-label="SIGMA">
+<defs><linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#052b62"/><stop offset=".5" stop-color="#0788c9"/><stop offset="1" stop-color="#0db8a4"/></linearGradient></defs>
+<path d="M48 23H217Q232 23 222 38L204 69H105L139 125L103 179H218Q232 179 224 195L207 229H45Q19 229 36 204L88 126L36 50Q20 23 48 23Z" fill="url(#s)"/>
+<path d="M176 57v-20m13 20V27m13 30V17" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
+<path d="M101 143v-29m0 25h65m0 0v-12m-52-17c0-9 15-9 15 0s-15 9-15 0m20 8h28" stroke="#063263" stroke-width="8" stroke-linecap="round" fill="none"/>
+<path d="M172 89v24m-12-12h24" stroke="#0bb3a5" stroke-width="9" stroke-linecap="round"/>
+<path d="M70 216q32-38 63-23t56-16t24-1" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round"/>
+<circle cx="116" cy="196" r="10" fill="#efffff" stroke="#fff" stroke-width="4"/>
+<circle cx="171" cy="184" r="10" fill="#efffff" stroke="#fff" stroke-width="4"/>
+</svg>
