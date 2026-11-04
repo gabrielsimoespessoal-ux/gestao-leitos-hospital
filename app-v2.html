@@ -3874,23 +3874,21 @@
                 return dt >= dataIni && dt <= dataFim;
             }).length;
 
-            if (pacientesDiaAcumulado === 0 && totalMovsPeriodo > 0) {
-                pacientesDiaAcumulado = totalMovsPeriodo * 1; 
-            }
+            // Não converter contagem de movimentações em pacientes-dia.
 
             var capacidadeTotalLeitosPeriodo = (totalL * diasNoPeriodo) || 1;
             var txOcpAcumVal = pacientesDiaAcumulado / capacidadeTotalLeitosPeriodo;
             if (txOcpAcumVal > 1) txOcpAcumVal = 1;
-            var txOcpAcumStr = (txOcpAcumVal * 100).toFixed(1) + '%';
-            var txDesocpAcumStr = ((1 - txOcpAcumVal) * 100).toFixed(1) + '%';
+            var txOcpAcumStr = 'N/D'; // Censo diário auditável exibido pelo módulo de ocupação.
+            var txDesocpAcumStr = 'N/D';
             
-            var mediaPermanencia = totalSaidasValidas > 0 ? (somaPermanenciaDias / totalSaidasValidas).toFixed(1) + ' dias' : (totalMovsPeriodo > 0 ? '1.0 dia' : '4.0 dias');
+            var mediaPermanencia = totalSaidasValidas > 0 ? (somaPermanenciaDias / totalSaidasValidas).toFixed(1) + ' dias' : 'N/D';
             var mediaPacientesDiaAcum = Math.round(pacientesDiaAcumulado / diasNoPeriodo);
-            if (mediaPacientesDiaAcum === 0 && totalMovsPeriodo > 0) mediaPacientesDiaAcum = totalMovsPeriodo;
+            // Sem fallback artificial de pacientes-dia.
             
             var totalSaidasGeral = countAlt + countOb;
-            var indiceRotativ = totalL > 0 ? (totalSaidasGeral / totalL).toFixed(2) : (totalMovsPeriodo > 0 ? '0.50' : '0.00');
-            var intervaloSubstituicao = totalSaidasGeral > 0 ? ((capacidadeTotalLeitosPeriodo - pacientesDiaAcumulado) / totalSaidasGeral).toFixed(1) + ' dias' : '0.5 dias';
+            var indiceRotativ = totalL > 0 ? (totalSaidasGeral / totalL).toFixed(2) : 'N/D';
+            var intervaloSubstituicao = 'N/D'; // Exige leitos-dia e pacientes-dia reais.
 
             var kpiContainer = document.getElementById('kpi-container');
             if(kpiContainer) {
@@ -3918,9 +3916,9 @@
                     return m.setor.includes(s.nome) && dt >= dataIni && dt <= dataFim; 
                 }).length;
 
-                var sTxOcpAcumSetor = sMovsSetor > 0 ? Math.min(100, (sTxVal * 100) + (sMovsSetor * 5)).toFixed(1) + '%' : txOcpAcumStr;
-                var sTxDesocpAcumSetor = sMovsSetor > 0 ? (100 - parseFloat(sTxOcpAcumSetor)).toFixed(1) + '%' : txDesocpAcumStr;
-                var sPacDiaAcumSetor = sMovsSetor > 0 ? mediaPacientesDiaAcum : 0;
+                var sTxOcpAcumSetor = 'N/D';
+                var sTxDesocpAcumSetor = 'N/D';
+                var sPacDiaAcumSetor = 'N/D';
 
                 var sAdmSetor = movimentacoesHistorico.filter(function(m){ var dt = new Date(m.dataDesfechoObj || m.dataIso || ''); return m.contabilizarIndicadores !== false && !isNaN(dt.getTime()) && dt >= dataIni && dt <= dataFim && ((m.acao === 'Admissão' && String(m.setor||'').includes(s.nome)) || (/transfer[eê]ncia interna/i.test(String(m.acao||'')) && String(m.destino||'') === s.nome && String(m.origem||'') !== s.nome)); }).length;
                 var sResIntSetor = movimentacoesHistorico.filter(function(m){ var o=(m.origem||'').toUpperCase(); return m.setor.includes(s.nome) && m.acao.toLowerCase().includes('reserva') && (o.includes('REMANEJAMENTO') || o.includes('SETOR INTERNO') || setoresData.some(function(st){return o===st.nome || o.includes(st.nome);})); }).length;
