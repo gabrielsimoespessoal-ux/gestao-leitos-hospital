@@ -2524,13 +2524,31 @@
             aviso.querySelector('#hsj-bloqueio-detalhe').textContent = detalhe || 'Aguardando confirmação do servidor.';
             aviso.style.display = online ? 'none' : 'flex';
         }
+        let hsjDadosUnsubscribe = null;
+        let hsjDadosRetryTimer = null;
+        let hsjDadosRetryCount = 0;
+        let hsjDadosListenerToken = 0;
+        function hsjAgendarReconexaoDados() {
+            if(hsjDadosRetryTimer || !window.hsjAuthReady || hsjSnapshotServidorConfirmado) return;
+            const delay = Math.min(60000, 8000 * Math.pow(2, Math.min(hsjDadosRetryCount, 3)));
+            hsjDadosRetryTimer = window.setTimeout(() => {
+                hsjDadosRetryTimer = null;
+                if(window.hsjAuthReady && !hsjSnapshotServidorConfirmado) carregarDadosDoFirebase();
+            }, delay);
+        }
         function carregarDadosDoFirebase() {
+            if(hsjDadosUnsubscribe) {
+                try { hsjDadosUnsubscribe(); } catch(e) { console.warn('Falha ao reiniciar escuta dos leitos', e); }
+                hsjDadosUnsubscribe = null;
+            }
+            const token = ++hsjDadosListenerToken;
             hsjAtualizarProtecaoConexao(false, 'Conectando ao banco de dados...');
             if (!window.db) { hsjAtualizarProtecaoConexao(false, 'Configuração do banco indisponível.'); return; }
             const { doc, onSnapshot } = window.firebaseModules;
             // Evita transação pesada de provisionamento a cada abertura. A rotina permanece disponível para execução administrativa.
-            onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
-                if(docSnap.metadata?.fromCache){multiusuarioStatus="conflito";hsjAtualizarProtecaoConexao(false,'Dados do cache local; aguardando confirmação do servidor.');console.warn("Dados recebidos do cache, aguardando confirmação do servidor.");return;}
+            hsjDadosUnsubscribe = onSnapshot(doc(window.db, "hospital", "dados"), (docSnap) => {
+                if(token !== hsjDadosListenerToken) return;
+                if(docSnap.metadata?.fromCache){multiusuarioStatus="conflito";hsjAtualizarProtecaoConexao(false,'Dados do cache local; aguardando confirmação do servidor.');console.warn("Dados recebidos do cache, aguardando confirmação do servidor.");hsjAgendarReconexaoDados();return;}
                 if (docSnap.exists()) {
                     if (!Array.isArray(docSnap.data()?.setoresData)) { multiusuarioStatus='conflito'; hsjAtualizarProtecaoConexao(false,'O servidor respondeu, mas a lista de setores está ausente ou inválida.');return; }
                     // Snapshot remoto é a fonte oficial, inclusive após gravação local.
@@ -2539,6 +2557,8 @@
                     firebaseBaseSnapshotLocal = normalizarFirebaseSeguro(data);
                     firebaseRevisionLocal = Number(data && data._meta && data._meta.revision || 0);
                     multiusuarioStatus = 'sincronizado';
+                    hsjDadosRetryCount = 0;
+                    if(hsjDadosRetryTimer){window.clearTimeout(hsjDadosRetryTimer);hsjDadosRetryTimer=null;}
                     if (data.setoresData) setoresData = data.setoresData;
                     if (data.movimentacoesHistorico) {
                         movimentacoesHistorico = data.movimentacoesHistorico.map(m => ({
@@ -2559,10 +2579,14 @@
                     hsjAtualizarProtecaoConexao(false,'Documento hospital/dados não encontrado no servidor.');
                 }
             }, erro => {
+                if(token !== hsjDadosListenerToken)return;
                 multiusuarioStatus='conflito';
+                hsjDadosRetryCount++;
                 console.error('Sincronização interrompida',erro);
-                hsjAtualizarProtecaoConexao(false,'Falha no Firebase (' + String(erro && erro.code || 'erro desconhecido') + '). Verifique conexão, permissões Firestore e serviço.');
+                hsjAtualizarProtecaoConexao(false,'Falha no Firebase (' + String(erro && erro.code || 'erro desconhecido') + '). Tentaremos reconectar automaticamente.');
+                hsjAgendarReconexaoDados();
             });
+            hsjAgendarReconexaoDados();
         }
         function atualizarBadgeMultiusuario() {
             var el=document.getElementById('multiuser-status-badge');
