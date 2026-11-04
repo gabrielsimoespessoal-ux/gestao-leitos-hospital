@@ -16,11 +16,15 @@
    if(!d.isConnected||frame.contentDocument!==d)return false;
    if(!panel.classList.contains('active'))return true;
    const sectors=Array.isArray(w.setoresData)?w.setoresData.filter(s=>Array.isArray(s.leitos)&&s.leitos.length):[];
+   const confirmed=w.multiusuarioStatus!=='conflito'&&d.getElementById('hsj-bloqueio-conexao')?.style.display==='none';
    // Never render absent, cache-only or disconnected data.
-   if(!sectors.length||w.multiusuarioStatus==='conflito')return true;
+   if(!sectors.length||!confirmed)return true;
    const cards=[...grid.querySelectorAll('.sector-box')];
    const beds=grid.querySelectorAll('.leito-pill').length;
-   if(cards.length&&beds){
+   const expected=sectors.reduce((sum,s)=>sum+s.leitos.length,0);
+   const allValid=sectors.every(s=>s.leitos.every(l=>l&&l.n!=null&&typeof l.status==='string'));
+   if(!allValid)return true;
+   if(cards.length===sectors.length&&beds===expected){
     emptyChecks=0;failures=0;
     const allHidden=cards.every(c=>d.defaultView.getComputedStyle(c).display==='none');
     if(allHidden){
@@ -41,12 +45,38 @@
    try{
     // Pure UI rerender, no Firebase write and no page refresh.
     w.renderizarPainelLeitos();
-    if(grid.querySelectorAll('.leito-pill').length){emptyChecks=0;failures=0;dismiss()}
-    else if(++failures>=3)notice('Não foi possível reconstruir o painel. Confira a conexão e tente atualizar apenas a página; nenhum registro foi alterado.');
+    const actual=grid.querySelectorAll('.leito-pill').length;
+    if(actual===expected){emptyChecks=0;failures=0;dismiss()}
+    else {
+      // Fallback de apresentação: apenas estado já confirmado; não toca no banco.
+      const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const allowed=['disponivel','ocupado','reservado','higienizacao','bloqueado'];
+      const html=sectors.map(sector=>{
+       const beds=sector.leitos;
+       const occupied=beds.filter(l=>l.status==='ocupado').length;
+       const free=beds.filter(l=>l.status==='disponivel').length;
+       const reserved=beds.filter(l=>l.status==='reservado').length;
+       const blocked=beds.filter(l=>l.status==='bloqueado').length;
+       const percent=beds.length?Math.round(occupied*100/beds.length):0;
+       return '<section class="sector-box"><div class="sector-title-row"><div><h3>'+esc(sector.nome)+'</h3><p>'+esc(sector.tipo||'')+' · Total: '+beds.length+'</p></div><span class="ocup-badge">'+percent+'% Ocup.</span></div><div class="leitos-grid">'+beds.map(l=>'<div role="button" tabindex="0" class="leito-pill leito-'+(allowed.includes(l.status)?l.status:'disponivel')+'" data-recover-sector="'+esc(sector.nome)+'" data-recover-bed="'+esc(l.n)+'" title="'+esc(l.paciente||'Leito '+l.n)+'">'+esc(l.n)+'</div>').join('')+'</div><div class="sector-summary">Total: <strong>'+beds.length+'</strong> · Livres: <strong>'+free+'</strong> · Ocupados: <strong>'+occupied+'</strong> · Reservados: <strong>'+reserved+'</strong> · Bloqueados: <strong>'+blocked+'</strong></div></section>';
+      }).join('');
+      if(html&&expected>0){
+       grid.innerHTML=html;
+       emptyChecks=0;failures=0;
+       notice('Exibição dos leitos restaurada com os dados confirmados do servidor.');
+      } else if(++failures>=3)notice('A exibição não pôde ser restaurada. As movimentações permanecem protegidas.');
+    }
    }catch(e){failures++;notice('Erro ao reconstruir os cartões: '+String(e?.message||e).slice(0,140));w.console?.error?.('SIGMA recuperação do painel',e)}
    finally{recovering=false}
    return true;
   }
+  grid.addEventListener('click',e=>{
+   const bed=e.target.closest('[data-recover-bed]');if(!bed)return;
+   if(typeof w.abrirHistoricoPacienteLeito==='function')w.abrirHistoricoPacienteLeito(bed.dataset.recoverSector,bed.dataset.recoverBed);
+  });
+  grid.addEventListener('keydown',e=>{
+   const bed=e.target.closest('[data-recover-bed]');if(bed&&(e.key==='Enter'||e.key===' ')){e.preventDefault();bed.click()}
+  });
   let stopped=false;
   const timer=w.setInterval(()=>{if(stopped)return;if(!verify()){stopped=true;w.clearInterval(timer)}},5000);
   // Check after a tab change without rewrapping shared save/sync functions.
