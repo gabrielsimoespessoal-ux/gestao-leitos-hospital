@@ -77,7 +77,7 @@ function render(win,doc){
  const fullyCovered=covered===days.length;
  const certified=fullyCovered&&complete===days.length;
  const shown=capacity?pct(occ,capacity):'N/D';
- const label=certified?'Taxa mensal apurada':'Taxa parcial por censos registrados';
+ const label=certified?'Taxa mensal validada':fullyCovered?'Taxa mensal por censos registrados (provisória)':'Taxa parcial por censos registrados';
  main.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0">'+
   '<div style="border:1px solid #cad9e9;background:#f1f7ff;border-radius:8px;padding:9px 13px;min-width:175px"><small>'+label+'</small><div style="font-size:24px;font-weight:700">'+esc(shown)+'</div></div>'+
   '<div style="border:1px solid #cad9e9;border-radius:8px;padding:9px 13px"><small>Pacientes-dia registrados</small><div style="font-size:20px;font-weight:700">'+occ+'</div></div>'+
@@ -92,8 +92,8 @@ function render(win,doc){
  const kpi=doc.getElementById('kpi-container');
  if(kpi)for(const card of kpi.children){
   if(/ocupação.*acum/i.test(card.querySelector('h4')?.textContent||'')){
-   const value=card.querySelector('.kpi-value');if(value)value.textContent=certified?shown:'N/D';
-   card.title=certified?'Censo diário fechado para todas as datas':'Sem censo fechado para todos os dias; consulte o painel de ocupação por censo';
+   const value=card.querySelector('.kpi-value');if(value)value.textContent=fullyCovered?shown:'N/D';
+   card.title=certified?'Censo diário fechado para todas as datas':fullyCovered?'Valor provisório: todos os dias têm censo, sem fechamento formal':'Faltam censos diários; taxa mensal indisponível';
   }
  }
  const table=doc.getElementById('tabela-indicadores-detalhada');
@@ -101,9 +101,9 @@ function render(win,doc){
   [...table.rows].forEach(tr=>{
    const cells=tr.cells;if(cells.length<10)return;
    const sector=cells[0].textContent.trim(),item=bySector.get(sector);
-   cells[3].textContent=certified&&item&&item.days===days.length?pct(item.occupied,item.operational):'N/D';
-   cells[5].textContent=certified&&item&&item.days===days.length&&item.operational>0?pct(item.operational-item.occupied,item.operational):'N/D';
-   cells[7].textContent=certified&&item&&item.days===days.length?String(item.occupied):'N/D';
+   cells[3].textContent=fullyCovered&&item&&item.days===days.length?pct(item.occupied,item.operational):'N/D';
+   cells[5].textContent=fullyCovered&&item&&item.days===days.length&&item.operational>0?pct(item.operational-item.occupied,item.operational):'N/D';
+   cells[7].textContent=fullyCovered&&item&&item.days===days.length?String(item.occupied):'N/D';
   });
  }
 }
