@@ -184,7 +184,7 @@ function init(){
   const dates=['filtro-data-inicio','filtro-data-fim'];
   dates.forEach(id=>doc.getElementById(id)?.addEventListener('change',()=>{loadRange(win,doc).catch(()=>{});render(win,doc)}));
   setInterval(()=>{
-   if(!frame.isConnected)return;
+   if(!frame.isConnected||doc.hidden||!doc.getElementById('indicadores')?.classList.contains('active'))return;
    loadingKey='';
    loadRange(win,doc).catch(()=>{});
    render(win,doc);
