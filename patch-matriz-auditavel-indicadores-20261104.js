@@ -29,7 +29,7 @@ el.querySelectorAll('[data-audit]').forEach(btn=>btn.onclick=()=>{
 const row=summary[Number(btn.dataset.audit)];
 el.querySelector('#hsj-audit-details').innerHTML='<h4>'+q(row.nome)+'</h4><table style="font-size:12px;width:100%"><tr><th>Data</th><th>Prontuário</th><th>Paciente</th><th>Movimentação</th><th>Contabilizar</th></tr>'+row.eventos.map(m=>'<tr>'+[date(m),m.atendimento||'',m.paciente||'',m.acao||'',m.contabilizarIndicadores===true?'Sim':m.contabilizarIndicadores===false?'Não':'Sem confirmação'].map(v=>'<td style="border-bottom:1px solid #eee;padding:5px">'+q(v)+'</td>').join('')+'</tr>').join('')+'</table>'});
 }
-draw();const t=setInterval(()=>{if(!root.isConnected){clearInterval(t);return}draw()},8000);
+draw();const t=setInterval(()=>{if(!root.isConnected){clearInterval(t);return}if(d.hidden||!d.getElementById('indicadores')?.classList.contains('active'))return;draw()},8000);
 }
 frame.addEventListener('load',()=>setTimeout(start,1500));setInterval(start,3500);start();
 })();
