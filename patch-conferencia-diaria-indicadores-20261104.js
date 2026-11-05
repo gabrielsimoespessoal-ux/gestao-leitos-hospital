@@ -116,7 +116,7 @@ function init(){
   get('hsj-conf-status').textContent='Movimentações do dia no histórico: '+dayRows.length+' · Eventos nas categorias selecionadas: '+match.length+' · Atualização automática com os dados sincronizados do SIGMA. Solicitações ainda não concluídas não são contadas como transferências realizadas.';
  }
  render();
- const timer=w.setInterval(()=>{if(!block.isConnected){w.clearInterval(timer);return}render()},5000);
+ const timer=w.setInterval(()=>{if(!block.isConnected){w.clearInterval(timer);return}if(d.hidden||!d.getElementById('indicadores')?.classList.contains('active'))return;render()},15000);
 }
 frame.addEventListener('load',()=>setTimeout(init,1300));
 setInterval(init,3000);init();
