@@ -23,7 +23,7 @@ style.textContent=`
 #hsj-tv-screen .tv-bed small{font-size:9px;letter-spacing:0;font-weight:750}
 #hsj-tv-screen .tv-markers{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:1px;line-height:1;white-space:nowrap;pointer-events:none}
 #hsj-tv-screen .tv-sex{font-size:clamp(8px,1.15vw,15px);color:white;text-shadow:0 1px 2px #000;font-weight:900}
-#hsj-tv-screen .tv-cm{font-size:clamp(6px,.65vw,9px);color:#fff;background:#0f766e;padding:1px;font-weight:900}
+#hsj-tv-screen .tv-cm{font-size:clamp(6px,.65vw,9px);color:#fff;background:#7c3aed;padding:1px;font-weight:900}
 #hsj-tv-screen .tv-ped{font-size:clamp(6px,.65vw,9px);color:#422006;background:#fbbf24;padding:1px;font-weight:900;border-radius:2px}\n#hsj-tv-screen .tv-iso{font-size:clamp(6px,.65vw,9px);color:#fff;background:#b91c1c;padding:1px;font-weight:900}
 #hsj-tv-screen .tv-bed-id{display:block;white-space:nowrap;line-height:1;font-weight:900}
 #hsj-tv-screen .tv-bed[data-status=ocupado]{background:#822b39;color:#fff}
@@ -151,8 +151,8 @@ function bedDetail(bed,sector,base){
  const profile=norm(data.perfil||data.perfilVaga||bed.perfil||bed.perfilVaga);
  const context=[profile,norm(sector.nome),norm(sector.tipo)].join(' ');
  const pediatric=['ocupado','reservado'].includes(bed.status)&&/pediatr|infantil/.test(context);
- const cm=bed.status==='ocupado'&&(/enfermaria clinica/.test(profile)||(/pediatr|infantil/.test(profile)&&/clinica/.test(profile)));
- return {sex,isolated,cm,pediatric};
+ const cc=bed.status==='ocupado'&&/cirurg/.test(profile);
+ return {sex,isolated,cc,pediatric};
 }
 function render(){
  if(!screen.classList.contains('active'))return;
@@ -176,7 +176,7 @@ function render(){
  const counts={total:0,ocupado:0,disponivel:0,reservado:0,higienizacao:0,bloqueado:0};
  sectorsNode.innerHTML=sectors.map(s=>{
  const beds=Array.isArray(s.leitos)?s.leitos:[];beds.forEach(l=>{counts.total++;if(Object.hasOwn(counts,l.status))counts[l.status]++});
- return '<article class="tv-sector"><div class="tv-sector-header"><div class="tv-sector-name">'+escapeHtml(s.nome)+'</div><div class="tv-sector-count">'+beds.length+' leitos</div></div><div class="tv-beds">'+beds.map(l=>{const status=Object.hasOwn(statuses,l.status)?l.status:'outro';const detail=bedDetail(l,s,base);const markers=(detail.sex?'<b class="tv-sex">'+detail.sex+'</b>':'')+(detail.isolated?'<b class="tv-iso">ISO</b>':'')+(detail.cm?'<b class="tv-cm">CM</b>':'')+(detail.pediatric?'<b class="tv-ped">PED</b>':'');return '<div class="tv-bed" data-status="'+status+'" title="'+escapeHtml(statuses[status]||l.status)+'"><span class="tv-markers">'+markers+'</span><span class="tv-bed-id">'+escapeHtml(l.n)+'</span></div>'}).join('')+'</div></article>';
+ return '<article class="tv-sector"><div class="tv-sector-header"><div class="tv-sector-name">'+escapeHtml(s.nome)+'</div><div class="tv-sector-count">'+beds.length+' leitos</div></div><div class="tv-beds">'+beds.map(l=>{const status=Object.hasOwn(statuses,l.status)?l.status:'outro';const detail=bedDetail(l,s,base);const markers=(detail.sex?'<b class="tv-sex">'+detail.sex+'</b>':'')+(detail.isolated?'<b class="tv-iso">ISO</b>':'')+(detail.cc?'<b class="tv-cm">C.C</b>':'')+(detail.pediatric?'<b class="tv-ped">PED</b>':'');return '<div class="tv-bed" data-status="'+status+'" title="'+escapeHtml(statuses[status]||l.status)+'"><span class="tv-markers">'+markers+'</span><span class="tv-bed-id">'+escapeHtml(l.n)+'</span></div>'}).join('')+'</div></article>';
  }).join('');
  const capacity=counts.total-counts.bloqueado;const rate=capacity?(counts.ocupado/capacity*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'—';
  const vals=[['Total',counts.total],['Ocupados',counts.ocupado],['Disponíveis',counts.disponivel],['Reservados',counts.reservado],['Higienização',counts.higienizacao],['Bloqueados',counts.bloqueado],['Ocupação',rate]];
