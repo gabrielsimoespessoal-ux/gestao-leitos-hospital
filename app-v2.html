@@ -182,8 +182,18 @@
             const cadastro=(state.basePacientesCadastrados||{})[a.pr];
             if(!cadastro)throw Error('Cadastro não localizado no banco. Atualize antes de editar.');
             const locations=[];
-            (state.setoresData||[]).forEach(s=>(s.leitos||[]).forEach(l=>{if(String(l.prontuario||'')===String(a.pr))locations.push({s,l})}));
-            if(locations.length!==1)throw Error('Localização ambígua ou ausente; confira o prontuário.');
+            // Localizar apenas leitos com vínculo ativo: registros residuais em leitos
+            // disponíveis, bloqueados ou em higienização não podem impedir ajustes cadastrais.
+            // Nunca escolher automaticamente entre duas ocupações/reservas ativas.
+            (state.setoresData||[]).forEach(s=>(s.leitos||[]).forEach(l=>{
+              if(!['ocupado','reservado'].includes(l.status))return;
+              if(String(l.prontuario||'').trim()!==String(a.pr).trim())return;
+              locations.push({s,l});
+            }));
+            if(locations.length!==1)throw Error(locations.length===0
+              ? 'Paciente sem leito ocupado ou reservado no banco. Atualize o painel e confira o prontuário.'
+              : 'Mais de um leito ocupado ou reservado vinculado ao prontuário. Corrija a duplicidade antes de salvar.');
+
             const loc=locations[0];
             if(a.expectedSetor&&loc.s.nome!==a.expectedSetor)throw Error('Paciente mudou de setor em outro computador.');
             if(a.expectedLeito&&String(loc.l.n)!==String(a.expectedLeito))throw Error('Paciente mudou de leito em outro computador.');
