@@ -151,7 +151,10 @@ function bedDetail(bed,sector,base){
  const profile=norm(data.perfil||data.perfilVaga||bed.perfil||bed.perfilVaga);
  const context=[profile,norm(sector.nome),norm(sector.tipo)].join(' ');
  const pediatric=['ocupado','reservado'].includes(bed.status)&&/pediatr|infantil/.test(context);
- const cc=bed.status==='ocupado'&&/cirurg/.test(profile);
+ const dc=bed.dadosCirurgicos;
+ const reservaCirurgica=bed.status==='reservado'&&dc&&typeof dc==='object'
+   &&[dc.medico,dc.dataHora,dc.procedimento].some(v=>String(v||'').trim().length>0);
+ const cc=['ocupado','reservado'].includes(bed.status)&&(/cirurg/.test(profile)||reservaCirurgica);
  return {sex,isolated,cc,pediatric};
 }
 function render(){
