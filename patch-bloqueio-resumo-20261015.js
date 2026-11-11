@@ -33,20 +33,35 @@ function boot(){
  }
  function renderOverview(){
   if(!overview.isConnected)return;
-  const sectors=Array.isArray(w.setoresData)?w.setoresData:[],all=counts(sectors.flatMap(s=>s.leitos||[]));
+  const sectors=Array.isArray(w.setoresData)?w.setoresData:[];
+  const isTransitory=sector=>{
+   const name=String(sector.nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+   return sector.virtual===true||name.includes('ESPERA VIRTUAL')||name.includes('SALAS OPERATORIAS')||name==='SRPA';
+  };
+  const effective=sectors.filter(s=>!isTransitory(s));
+  const transitory=sectors.filter(isTransitory);
+  const all=counts(effective.flatMap(s=>s.leitos||[]));
+  const transient=counts(transitory.flatMap(s=>s.leitos||[]));
   const capacity=all.total-all.bloqueado;
   const pct=capacity?100*all.ocupado/capacity:0;
   const cards=[['Total',all.total],['Ocupados',all.ocupado],['Disponíveis',all.disponivel],['Reservados',all.reservado],['Higienização',all.higienizacao],['Bloqueados',all.bloqueado],['Ocupação',pct.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%']];
   overview.replaceChildren();
-  const title=d.createElement('div');title.innerHTML='<strong style="font-size:19px;color:#0f2747">Resumo geral da ocupação hospitalar</strong><div style="font-size:12px;color:#64748b;margin-top:4px">Indicadores calculados a partir do estado compartilhado mais recente recebido neste computador. Ocupação = ocupados ÷ (total − bloqueados).</div>';overview.appendChild(title);
+  const title=d.createElement('div');title.innerHTML='<strong style="font-size:19px;color:#0f2747">Resumo geral da ocupação hospitalar — leitos efetivos</strong><div style="font-size:12px;color:#64748b;margin-top:4px">Somente leitos efetivos de internação. Ocupação = ocupados ÷ (total efetivo − bloqueados efetivos). Excluídos do cálculo: SRPA, salas operatórias e espera virtual.</div>';overview.appendChild(title);
   const grid=d.createElement('div');grid.className='kpis';
   cards.forEach(([label,value])=>{const cell=d.createElement('div');cell.className='kpi';const small=d.createElement('small');small.textContent=label;const num=d.createElement('b');num.textContent=typeof value==='number'?fmt(value):value;cell.append(small,num);grid.appendChild(cell)});overview.appendChild(grid);
   const wrap=d.createElement('div');wrap.className='scroll';const table=d.createElement('table');
   const header=d.createElement('tr');['Setor','Total','Ocupados','Livres','Reservados','Higienização','Bloqueados','Ocupação'].forEach(s=>{const th=d.createElement('th');th.textContent=s;header.appendChild(th)});
   const thead=d.createElement('thead');thead.appendChild(header);table.appendChild(thead);
   const tbody=d.createElement('tbody');
-  sectors.forEach(s=>{const c=counts(s.leitos),cap=c.total-c.bloqueado,row=d.createElement('tr');[s.nome,c.total,c.ocupado,c.disponivel,c.reservado,c.higienizacao,c.bloqueado,cap?(100*c.ocupado/cap).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'—'].forEach(v=>{const td=d.createElement('td');td.textContent=v;row.appendChild(td)});tbody.appendChild(row)});
+  effective.forEach(s=>{const c=counts(s.leitos),cap=c.total-c.bloqueado,row=d.createElement('tr');[s.nome,c.total,c.ocupado,c.disponivel,c.reservado,c.higienizacao,c.bloqueado,cap?(100*c.ocupado/cap).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'—'].forEach(v=>{const td=d.createElement('td');td.textContent=v;row.appendChild(td)});tbody.appendChild(row)});
   table.appendChild(tbody);wrap.appendChild(table);overview.appendChild(wrap);
+  if(transitory.length){
+   const note=d.createElement('details');note.style.cssText='margin-top:10px;padding:9px 12px;background:#f8fafc;border:1px solid #dbe5ef;border-radius:8px;font-size:12px;color:#475569';
+   const label=d.createElement('summary');label.style.cursor='pointer';label.textContent='Áreas transitórias (fora da ocupação): '+transient.total+' posições · '+transient.ocupado+' em uso';note.appendChild(label);
+   const area=d.createElement('div');area.style.marginTop='7px';
+   area.textContent=transitory.map(s=>s.nome+': '+(s.leitos||[]).length+' posições').join(' · ');
+   note.appendChild(area);overview.appendChild(note);
+  }
  }
  const block=d.createElement('div');block.id='hsj-fast-block';block.style.display='none';
  const message=d.createElement('p');message.textContent='Bloqueio administrativo: não exige prontuário nem informações de paciente. Só é permitido bloquear um leito sem ocupação ou reserva.';message.style.cssText='margin:0 0 10px;color:#5b21b6';
