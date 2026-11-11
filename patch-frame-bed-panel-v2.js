@@ -44,8 +44,7 @@
         // Reserva cirúrgica eletiva também deve receber C.C mesmo antes da admissão.
         // Considerar informação cirúrgica vinculada ao próprio leito, mas nunca o setor sozinho.
         const dc=l.dadosCirurgicos;
-        const reservaCirurgica=l.status==='reservado' && dc && typeof dc==='object'
-          && [dc.medico,dc.dataHora,dc.procedimento].some(v=>String(v||'').trim().length>0);
+        const reservaCirurgica=l.status==='reservado' && !!dc && typeof dc==='object';
         if(!/cirurg/.test(perfil)&&!reservaCirurgica)return;
         pill.style.position='relative';
         pill.style.overflow='visible';
