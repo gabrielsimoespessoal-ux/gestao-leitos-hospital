@@ -2,7 +2,7 @@
 'use strict';
 const frame=document.getElementById('appFrame');if(!frame)return;
 const TZ='America/Maceio';
-const excluded=/ESPERA VIRTUAL|SALAS OPERAT[OÓ]RIAS|^SRPA$|URGENCIA|URGÊNCIA/i;
+const excluded=/ESPERA VIRTUAL|SALAS OPERAT[OÓ]RIAS|^SRPA$/i;
 let wired=false,writing=false,lastAttempt='',daily={},loadingKey='',loadVersion=0;
 let saveError='';
 const dateKey=dt=>{
@@ -99,7 +99,7 @@ function render(win,doc){
   '<details style="font-size:12px"><summary style="cursor:pointer;font-weight:600">Ver ocupação por setor</summary><div style="overflow-x:auto;margin-top:6px"><table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr><th style="text-align:left">Setor</th><th>Pacientes-dia</th><th>Leitos-dia</th><th>Taxa</th><th>Dias</th></tr></thead><tbody>'+
    [...bySector].sort((a,b)=>a[0].localeCompare(b[0],'pt-BR')).map(([name,v])=>'<tr><td style="padding:5px;border-bottom:1px solid #eee">'+esc(name)+'</td><td style="text-align:center">'+v.occupied+'</td><td style="text-align:center">'+v.operational+'</td><td style="text-align:center">'+pct(v.occupied,v.operational)+'</td><td style="text-align:center">'+v.days+'</td></tr>').join('')+'</tbody></table></div></details>';
  footer.textContent=(certified?'Todos os censos do período foram fechados.':fullyCovered?'Todos os dias têm registro, mas há censos ainda não fechados; resultado provisório.':'Faltam '+(days.length-totalCovered)+' dia(s) de censo no período; resultado parcial, não utilizar como taxa mensal oficial.')+
-  ' · Excluídos: espera virtual, salas operatórias, SRPA e urgências. Leitos bloqueados não entram no denominador.'+
+  ' · Excluídos: espera virtual, salas operatórias e SRPA. Leitos bloqueados não entram no denominador.'+
   (saveError?' · ALERTA: não foi possível gravar censo diário: '+saveError:'');
  // Legacy accumulated occupancy is not evidence-based: suppress it, never fill with approximations.
  const kpi=doc.getElementById('kpi-container');
