@@ -38,16 +38,21 @@
 
       function aplicarIconeClinica(pill,l){
         pill.querySelectorAll('.perfil-clinica-v3,.perfil-cirurgica-v3').forEach(x=>x.remove());
-        if(!l||l.status!=='ocupado'||!l.prontuario)return;
+        if(!l||!['ocupado','reservado'].includes(l.status)||!l.prontuario)return;
         const b=w.basePacientesCadastrados?.[l.prontuario]||{};
         const perfil=String(b.perfil||b.perfilVaga||l.perfil||l.perfilVaga||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
-        if(!/cirurg/.test(perfil))return;
+        // Reserva cirúrgica eletiva também deve receber C.C mesmo antes da admissão.
+        // Considerar informação cirúrgica vinculada ao próprio leito, mas nunca o setor sozinho.
+        const dc=l.dadosCirurgicos;
+        const reservaCirurgica=l.status==='reservado' && dc && typeof dc==='object'
+          && [dc.medico,dc.dataHora,dc.procedimento].some(v=>String(v||'').trim().length>0);
+        if(!/cirurg/.test(perfil)&&!reservaCirurgica)return;
         pill.style.position='relative';
         pill.style.overflow='visible';
         const badge=d.createElement('span');
         badge.className='perfil-cirurgica-v3';
         badge.textContent='C.C';
-        badge.title='Paciente cirúrgico';
+        badge.title=l.status==='reservado'?'Reserva cirúrgica':'Paciente cirúrgico';
         badge.style.cssText='position:absolute;bottom:-11px;top:auto;left:-9px;min-width:24px;height:18px;padding:0 4px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#7c3aed;color:#fff;font-size:9px;font-weight:900;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.28);z-index:5;line-height:1';
         pill.appendChild(badge);
       }
@@ -60,7 +65,7 @@
           ctr=d.createElement('div');
           ctr.id='gestao-bloqueios-v2';
           ctr.style.cssText='background:#fff;border:1px solid #e2e8f0;border-left:5px solid #8b5cf6;border-radius:8px;padding:12px 14px;margin:0 0 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap';
-          ctr.innerHTML='<strong style="color:#6d28d9">Gestão rápida de leitos</strong><span style="font-size:.82rem;color:#64748b">Clique em qualquer leito para bloquear ou liberar diretamente pelo painel.</span><span id="badge-bloqueios-v2" style="background:#ede9fe;color:#6d28d9;padding:5px 9px;border-radius:999px;font-weight:700;font-size:.8rem"></span><button id="btn-bloqueados-v2" class="btn" style="background:#8b5cf6;padding:.45rem .8rem">🔒 Leitos bloqueados</button><button id="btn-todos-v2" class="btn" style="background:#64748b;padding:.45rem .8rem">Mostrar todos</button><span style="margin-left:auto;font-size:.8rem;color:#64748b;font-weight:700">C.C Paciente Cirúrgico &nbsp; ♀ Feminino &nbsp; ♂ Masculino</span>';
+          ctr.innerHTML='<strong style="color:#6d28d9">Gestão rápida de leitos</strong><span style="font-size:.82rem;color:#64748b">Clique em qualquer leito para bloquear ou liberar diretamente pelo painel.</span><span id="badge-bloqueios-v2" style="background:#ede9fe;color:#6d28d9;padding:5px 9px;border-radius:999px;font-weight:700;font-size:.8rem"></span><button id="btn-bloqueados-v2" class="btn" style="background:#8b5cf6;padding:.45rem .8rem">🔒 Leitos bloqueados</button><button id="btn-todos-v2" class="btn" style="background:#64748b;padding:.45rem .8rem">Mostrar todos</button><span style="margin-left:auto;font-size:.8rem;color:#64748b;font-weight:700">C.C Paciente/Reserva Cirúrgica &nbsp; ♀ Feminino &nbsp; ♂ Masculino</span>';
           const header=painel.querySelector('.page-header');
           if(header) header.after(ctr);
           d.getElementById('btn-bloqueados-v2').onclick=()=>{filtro='bloqueados';aplicarExtras();};
