@@ -2962,7 +2962,11 @@
                 var ocupados = s.leitos.filter(function(l) { return l.status === 'ocupado'; }).length;
                 var higienizacao = s.leitos.filter(function(l) { return l.status === 'higienizacao'; }).length;
                 var reservados = s.leitos.filter(function(l) { return l.status === 'reservado'; }).length;
+                var sectorNameNorm = String(s.nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+                var areaTransitoria = s.virtual===true || sectorNameNorm.includes('ESPERA VIRTUAL') ||
+                    sectorNameNorm.includes('SALAS OPERATORIAS') || sectorNameNorm==='SRPA';
                 var ocupPercent = total > 0 ? Math.round((ocupados / total) * 100) : 0;
+                var ocupBadgeTexto = areaTransitoria ? 'Área transitória' : ocupPercent + '% Ocup.';
 
                 var pillsHtml = '';
                 s.leitos.forEach(function(l) {
@@ -2976,7 +2980,7 @@
                     pillsHtml += '<div class="leito-pill ' + classeCor + '" title="Leito ' + l.n + ' - ' + tooltipPaciente + '" onclick="abrirHistoricoPacienteLeito(\'' + s.nome + '\', \'' + l.n + '\')">' + l.n + '</div>';
                 });
 
-                var blocoSetor = '<div class="sector-box"><div class="sector-title-row"><div><h3>' + s.nome + '</h3><p>' + s.tipo + ' • Total: ' + total + '</p></div><span class="ocup-badge">' + ocupPercent + '% Ocup.</span></div><div class="leitos-grid">' + pillsHtml + '</div><div class="sector-summary"><span style="color:var(--secondary)">Total: <strong>' + total + '</strong></span><span style="color:var(--success)">Livres: <strong>' + livres + '</strong></span><span style="color:var(--danger)">Ocupados: <strong>' + ocupados + '</strong></span><span style="color:var(--warning)">Higieniz.: <strong>' + higienizacao + '</strong></span><span style="color:var(--info)">Reservados: <strong>' + reservados + '</strong></span></div></div>';
+                var blocoSetor = '<div class="sector-box"><div class="sector-title-row"><div><h3>' + s.nome + '</h3><p>' + s.tipo + ' • Total: ' + total + '</p></div><span class="ocup-badge">' + ocupBadgeTexto + '</span></div><div class="leitos-grid">' + pillsHtml + '</div><div class="sector-summary"><span style="color:var(--secondary)">Total: <strong>' + total + '</strong></span><span style="color:var(--success)">Livres: <strong>' + livres + '</strong></span><span style="color:var(--danger)">Ocupados: <strong>' + ocupados + '</strong></span><span style="color:var(--warning)">Higieniz.: <strong>' + higienizacao + '</strong></span><span style="color:var(--info)">Reservados: <strong>' + reservados + '</strong></span></div></div>';
                 
                 htmlPainel += blocoSetor;
                 htmlPlantao += blocoSetor;
