@@ -3821,16 +3821,20 @@
 
             var setoresParaCalc = setoresSelecionados.includes("GERAL") || setoresSelecionados.length === 0 ? setoresData : setoresData.filter(function(s) { return setoresSelecionados.includes(s.nome); });
             
-            var totalL = 0;
-            setoresParaCalc.forEach(function(s) {
-                if(!s.virtual && s.nome!=='ESPERA VIRTUAL INTERNA') totalL += s.leitos.length;
-            });
-
-            var totalOcpAtual = 0;
-            setoresParaCalc.forEach(function(s) {
-                if(!s.virtual && s.nome!=='ESPERA VIRTUAL INTERNA') totalOcpAtual += s.leitos.filter(function(l) { return l.status === 'ocupado'; }).length;
-            });
-            var txOcpAtualVal = totalL > 0 ? (totalOcpAtual / totalL) : 0;
+            // Indicadores hospitalares de ocupação: apenas leitos efetivos.
+            // SRPA, salas operatórias e espera virtual são áreas transitórias;
+            // permanecem nas telas operacionais, mas nunca no denominador ou numerador.
+            var setorEfetivo = function(s) {
+                var name = String(s.nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+                return !s.virtual && !name.includes('ESPERA VIRTUAL') &&
+                    !name.includes('SALAS OPERATORIAS') && name !== 'SRPA';
+            };
+            var leitosEfetivos = setoresParaCalc.filter(setorEfetivo).flatMap(function(s) { return s.leitos||[]; });
+            var totalL = leitosEfetivos.length;
+            var totalBloqueadosEfetivos = leitosEfetivos.filter(function(l) { return l.status === 'bloqueado'; }).length;
+            var totalOperacional = Math.max(0,totalL-totalBloqueadosEfetivos);
+            var totalOcpAtual = leitosEfetivos.filter(function(l) { return l.status === 'ocupado'; }).length;
+            var txOcpAtualVal = totalOperacional > 0 ? (totalOcpAtual / totalOperacional) : 0;
             var txOcpAtualStr = (txOcpAtualVal * 100).toFixed(1) + '%';
             var txDesocpAtualStr = ((1 - txOcpAtualVal) * 100).toFixed(1) + '%';
 
