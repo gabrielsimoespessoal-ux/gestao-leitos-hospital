@@ -156,6 +156,15 @@ function bedDetail(bed,sector,base){
  const cc=['ocupado','reservado'].includes(bed.status)&&(/cirurg/.test(profile)||reservaCirurgica);
  return {sex,isolated,cc,pediatric};
 }
+function tooltipForBed(bed,base){
+ const status=Object.hasOwn(statuses,bed.status)?bed.status:'outro';
+ if(status==='ocupado'||status==='reservado'){
+  const patient=bed.prontuario!=null?base?.[bed.prontuario]:null;
+  const name=String(bed.paciente||patient?.nome||patient?.nomePaciente||'').trim();
+  return name||'Paciente não identificado';
+ }
+ return status==='disponivel'?'Leito disponível':(statuses[status]||String(bed.status||''));
+}
 function render(){
  if(!screen.classList.contains('active'))return;
  showClock();let sectors,base={};
@@ -174,7 +183,7 @@ function render(){
   }
  }catch(e){console.warn('Modo TV - leitura:',e);sectors=null;base={}}
  if(!Array.isArray(sectors)){sectorsNode.innerHTML='<div style="padding:20px;color:#fff">Aguardando conexão com o painel de leitos… Verifique se o painel principal já carregou.</div>';return}
- try{const snapshot=JSON.stringify(sectors.map(s=>[s.nome,(s.leitos||[]).map(l=>[l.n,l.status,bedDetail(l,s,base)])]));if(snapshot===last)return;last=snapshot;
+ try{const snapshot=JSON.stringify(sectors.map(s=>[s.nome,(s.leitos||[]).map(l=>[l.n,l.status,bedDetail(l,s,base),tooltipForBed(l,base)])]));if(snapshot===last)return;last=snapshot;
  const counts={total:0,ocupado:0,disponivel:0,reservado:0,higienizacao:0,bloqueado:0};
  let transitoryTotal=0;
  const operationalSector=s=>{
@@ -185,7 +194,7 @@ function render(){
  const beds=Array.isArray(s.leitos)?s.leitos:[];
  if(operationalSector(s))beds.forEach(l=>{counts.total++;if(Object.hasOwn(counts,l.status))counts[l.status]++});
  else transitoryTotal+=beds.length;
- return '<article class="tv-sector"><div class="tv-sector-header"><div class="tv-sector-name">'+escapeHtml(s.nome)+'</div><div class="tv-sector-count">'+beds.length+' leitos</div></div><div class="tv-beds">'+beds.map(l=>{const status=Object.hasOwn(statuses,l.status)?l.status:'outro';const detail=bedDetail(l,s,base);const markers=(detail.sex?'<b class="tv-sex">'+detail.sex+'</b>':'')+(detail.isolated?'<b class="tv-iso">ISO</b>':'')+(detail.cc?'<b class="tv-cm">C.C</b>':'')+(detail.pediatric?'<b class="tv-ped">PED</b>':'');return '<div class="tv-bed" data-status="'+status+'" title="'+escapeHtml(statuses[status]||l.status)+'"><span class="tv-markers">'+markers+'</span><span class="tv-bed-id">'+escapeHtml(l.n)+'</span></div>'}).join('')+'</div></article>';
+ return '<article class="tv-sector"><div class="tv-sector-header"><div class="tv-sector-name">'+escapeHtml(s.nome)+'</div><div class="tv-sector-count">'+beds.length+' leitos</div></div><div class="tv-beds">'+beds.map(l=>{const status=Object.hasOwn(statuses,l.status)?l.status:'outro';const detail=bedDetail(l,s,base);const markers=(detail.sex?'<b class="tv-sex">'+detail.sex+'</b>':'')+(detail.isolated?'<b class="tv-iso">ISO</b>':'')+(detail.cc?'<b class="tv-cm">C.C</b>':'')+(detail.pediatric?'<b class="tv-ped">PED</b>':'');return '<div class="tv-bed" data-status="'+status+'" title="'+escapeHtml(tooltipForBed(l,base))+'"><span class="tv-markers">'+markers+'</span><span class="tv-bed-id">'+escapeHtml(l.n)+'</span></div>'}).join('')+'</div></article>';
  }).join('');
  const capacity=counts.total-counts.bloqueado;const rate=capacity?(counts.ocupado/capacity*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'—';
  const vals=[['Leitos efetivos',counts.total],['Ocupados',counts.ocupado],['Disponíveis',counts.disponivel],['Reservados',counts.reservado],['Higienização',counts.higienizacao],['Bloqueados',counts.bloqueado],['Ocupação',rate],['Transitórios (não computados)',transitoryTotal]];
