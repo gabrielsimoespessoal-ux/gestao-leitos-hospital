@@ -8,11 +8,7 @@ const promptIndicador=(acao,setor)=>{
  const uti=String(setor||'').toUpperCase().includes('UTI');
  return w.confirm('INDICADORES HOSPITALARES\\n\\nDeseja COMPUTAR esta movimentação nos indicadores?\\n\\nAção: '+acao+(uti?'\\nOrigem UTI: se computada, qualquer transferência também será alta da UTI.':'')+'\\n\\nOK = SIM, COMPUTAR\\nCancelar = NÃO COMPUTAR\\n\\nA movimentação será executada normalmente em ambas as opções.');
 };
-const core=['executarEntradaLeitoAtomica','executarAdmissaoReservaAtomica','executarSaidaLeitoAtomica'];
-core.forEach(nome=>{
- const original=w[nome];if(typeof original!=='function')return;
- w[nome]=function(args){const a={...(args||{})};if(typeof a.contabilizarIndicadores!=='boolean')a.contabilizarIndicadores=promptIndicador(a.acao||(/Admissao/.test(nome)?'Admissão':'Saída'),a.setor);return original.call(w,a);};
-});
+// Validação de indicadores centralizada no módulo obrigatório: não interceptar transações atômicas aqui.
 const original=w.executarMovimentacaoLeito;
 if(typeof original==='function')w.executarMovimentacaoLeito=async function(){
  const ac=d.getElementById('mov-acao')?.value||'';
@@ -22,9 +18,9 @@ if(typeof original==='function')w.executarMovimentacaoLeito=async function(){
   const medico=get('mov-medico'),dataHora=get('mov-data-cirurgia'),procedimento=get('mov-procedimento');
   if(!setor||!leito||!nome||!nasc||!sexo||!perfil||!origem||!medico||!dataHora||!procedimento){w.alert('Preencha os campos obrigatórios e os dados específicos da cirurgia.');return;}
   const pr=get('mov-atendimento')||('RES-'+Date.now()+'-'+Math.random().toString(36).slice(2,6));
-  const contabilizar=promptIndicador(ac,setor);
+  // Reserva não é admissão e não contabiliza ocupação ou entrada nos indicadores.
   try{
-   const r=await w.executarEntradaLeitoAtomica({acao:ac,setor,leito,pr,nome,nasc,sexo,perfil,origem,convenio:get('mov-convenio'),precaucao:get('mov-precaucao'),previsaoAlta:get('mov-previsao-alta-paciente'),medicoCirurgiao:medico,dataHoraCirurgia:dataHora,procedimentoProposto:procedimento,contabilizarIndicadores:contabilizar,usuario:w.usuarioAtual?.nome||'usuario'});
+   const r=await w.executarEntradaLeitoAtomica({acao:ac,setor,leito,pr,nome,nasc,sexo,perfil,origem,convenio:get('mov-convenio'),precaucao:get('mov-precaucao'),previsaoAlta:get('mov-previsao-alta-paciente'),medicoCirurgiao:medico,dataHoraCirurgia:dataHora,procedimentoProposto:procedimento,contabilizarIndicadores:false,usuario:w.usuarioAtual?.nome||'usuario'});
    if(r?.status!=='reservado')throw Error('Banco não confirmou status reservado.');
    ['mov-atendimento','mov-paciente','mov-nascimento'].forEach(id=>{const el=d.getElementById(id);if(el)el.value='';});
    w.alert('Reserva cirúrgica '+(r.jaExistia?'já existente e confirmada':'GRAVADA NO BANCO')+' para '+setor+' / leito '+leito+'. Aguarde a atualização do painel.');
@@ -36,10 +32,12 @@ if(typeof original==='function')w.executarMovimentacaoLeito=async function(){
   const get=id=>d.getElementById(id)?.value?.trim()||'';
   const pr=get('mov-atendimento'),dest=get('mov-setor'),leito=get('mov-leito');
   if(!pr||!dest||!leito){w.alert('Informe prontuário, setor e leito de destino.');return;}
-  const contabilizar=promptIndicador(ac, w.setoresData?.find(s=>s.leitos?.some(l=>l.prontuario===pr&&l.status==='ocupado'))?.nome);
+  if(typeof w.hsjEscolherIndicadorMovimentacao!=='function')throw Error('Módulo de indicadores indisponível. Recarregue o sistema antes de transferir.');
+  const escolha=await w.hsjEscolherIndicadorMovimentacao('Transferência interna entre setores');
+  if(!escolha)return;
   try{
    if(typeof w.executarTransferenciaSeguraV20261009!=='function')throw Error('Transação segura indisponível.');
-   await w.executarTransferenciaSeguraV20261009({pr,setorDestino:dest,leitoDestino:leito,contabilizarIndicadores:contabilizar,usuario:w.usuarioAtual?.nome});
+   await w.executarTransferenciaSeguraV20261009({pr,setorDestino:dest,leitoDestino:leito,...escolha,usuario:w.usuarioAtual?.nome});
    if(typeof w.carregarDadosDoFirebase==='function')w.carregarDadosDoFirebase();
    w.alert('Transferência CONFIRMADA no banco. Acomodação de origem liberada e destino ocupado.');
    if(typeof w.renderizarPainelLeitos==='function')w.renderizarPainelLeitos();
