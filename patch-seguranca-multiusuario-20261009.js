@@ -32,10 +32,10 @@ if(typeof original==='function')w.executarMovimentacaoLeito=async function(){
   const get=id=>d.getElementById(id)?.value?.trim()||'';
   const pr=get('mov-atendimento'),dest=get('mov-setor'),leito=get('mov-leito');
   if(!pr||!dest||!leito){w.alert('Informe prontuário, setor e leito de destino.');return;}
-  if(typeof w.hsjEscolherIndicadorMovimentacao!=='function')throw Error('Módulo de indicadores indisponível. Recarregue o sistema antes de transferir.');
-  const escolha=await w.hsjEscolherIndicadorMovimentacao('Transferência interna entre setores');
-  if(!escolha)return;
   try{
+   if(typeof w.hsjEscolherIndicadorMovimentacao!=='function')throw Error('Módulo de indicadores indisponível. Recarregue o sistema antes de transferir.');
+   const escolha=await w.hsjEscolherIndicadorMovimentacao('Transferência interna entre setores');
+   if(!escolha)return;
    if(typeof w.executarTransferenciaSeguraV20261009!=='function')throw Error('Transação segura indisponível.');
    await w.executarTransferenciaSeguraV20261009({pr,setorDestino:dest,leitoDestino:leito,...escolha,usuario:w.usuarioAtual?.nome});
    if(typeof w.carregarDadosDoFirebase==='function')w.carregarDadosDoFirebase();
