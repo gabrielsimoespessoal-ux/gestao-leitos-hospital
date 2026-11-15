@@ -368,7 +368,7 @@
                     prontuario: args.pr
                 }
             }));
-            await setDoc(backupRef, backupPlain);
+            try { await setDoc(backupRef, backupPlain); } catch (backupErr) { console.warn('Backup complementar indisponível; transação e auditoria permanecem obrigatórias:',backupErr); }
 
             const resultado = await runTransaction(db, async function(tx) {
                 const snap = await tx.get(ref);
@@ -476,14 +476,14 @@
             const snapAntes = await getDoc(ref);
             if(!snapAntes.exists()) throw new Error('Banco principal não encontrado.');
             const remotoAntes = JSON.parse(JSON.stringify(snapAntes.data()));
-            await setDoc(backupRef, JSON.parse(JSON.stringify({
+            try { await setDoc(backupRef, JSON.parse(JSON.stringify({
                 ...remotoAntes,
                 _backup_meta:{
                     tipo:'antes_entrada_leito',
                     criadoEm:agora.toISOString(),
                     setor:args.setor,leito:args.leito,prontuario:args.pr,acao:args.acao
                 }
-            })));
+            }))); } catch (backupErr) { console.warn('Backup complementar indisponível; transação e auditoria permanecem obrigatórias:',backupErr); }
 
             const resultado = await runTransaction(db, async function(tx){
                 const snap = await tx.get(ref);
@@ -611,9 +611,9 @@
           const leitoB=setorB?.leitos?.find(l=>String(l.n)===String(args.leito));
           if(!leitoB||leitoB.status!=='reservado'||String(leitoB.prontuario||'')!==provis)throw Error('Reserva não corresponde ao leito informado. Atualize a página.');
           const stamp=agora.toISOString().replace(/[:.]/g,'-')+'-'+Math.random().toString(36).slice(2,8);
-          await setDoc(doc(db,'hospital','backup_admissao_reserva_'+stamp),{
+          try { await setDoc(doc(db,'hospital','backup_admissao_reserva_'+stamp),{
             ...dadosBackup,_backup_meta:{tipo:'antes_conversao_reserva_admissao',criadoEm:agora.toISOString(),setor:args.setor,leito:args.leito}
-          });
+          }); } catch (backupErr) { console.warn('Backup complementar da conversão indisponível; transação e auditoria permanecem obrigatórias:',backupErr); }
           return runTransaction(db,async tx=>{
             const snap=await tx.get(ref);if(!snap.exists())throw Error('Banco não encontrado.');
             const data=JSON.parse(JSON.stringify(snap.data()));
@@ -784,7 +784,7 @@
             const snapAntes = await getDoc(ref);
             if(!snapAntes.exists()) throw new Error('Banco principal não encontrado.');
             const remotoAntes = JSON.parse(JSON.stringify(snapAntes.data()));
-            await setDoc(backupRef, JSON.parse(JSON.stringify({
+            try { await setDoc(backupRef, JSON.parse(JSON.stringify({
                 ...remotoAntes,
                 _backup_meta:{
                     tipo:'antes_status_leito',
@@ -792,7 +792,7 @@
                     setor:args.setor, leito:args.leito,
                     statusDestino:args.statusDestino
                 }
-            })));
+            }))); } catch (backupErr) { console.warn('Backup complementar indisponível; transação e auditoria permanecem obrigatórias:',backupErr); }
 
             const resultado = await runTransaction(db, async function(tx){
                 const snap = await tx.get(ref);
@@ -900,14 +900,14 @@
             const snapAntes = await getDoc(ref);
             if (!snapAntes.exists()) throw new Error('Banco principal não encontrado.');
             const remotoAntes = JSON.parse(JSON.stringify(snapAntes.data()));
-            await setDoc(backupRef, JSON.parse(JSON.stringify({
+            try { await setDoc(backupRef, JSON.parse(JSON.stringify({
                 ...remotoAntes,
                 _backup_meta: {
                     tipo:'antes_saida_leito',
                     criadoEm:agora.toISOString(),
                     setor:args.setor, leito:args.leito, prontuario:args.pr, acao:args.acao
                 }
-            })));
+            }))); } catch (backupErr) { console.warn('Backup complementar indisponível; transação e auditoria permanecem obrigatórias:',backupErr); }
 
             const resultado = await runTransaction(db, async function(tx){
                 const snap = await tx.get(ref);
