@@ -14,6 +14,8 @@
    const tipo=d.getElementById('transf-tipo-destino')?.value;
    if(tipo==='externa'){
     if(![...select.options].some(o=>o.value==='HOSPITAL DO CORAÇÃO'))select.add(new Option('HOSPITAL DO CORAÇÃO','HOSPITAL DO CORAÇÃO'));
+    // SAD é um destino externo; manter o registro de solicitação, baixa e histórico originais.
+    if(![...select.options].some(o=>o.value==='SAD'))select.add(new Option('SAD — Serviço de Atenção Domiciliar','SAD'));
     if(![...select.options].some(o=>o.value==='__OUTRA_UNIDADE__'))select.add(new Option('Outra unidade (digitar nome)','__OUTRA_UNIDADE__'));
    }
    field.style.display=tipo==='externa'&&select.value==='__OUTRA_UNIDADE__'?'block':'none';
