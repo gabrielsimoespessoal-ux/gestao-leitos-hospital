@@ -24,7 +24,7 @@ function ui(w,d){
  '<label>Leitos-dia<input id="hsj-hist-ld" type="number" min="1" step="1" value="1000" style="width:100px"></label>'+
  '<label>Fonte<input id="hsj-hist-source" type="text" maxlength="160" value="Relatório do sistema externo — Hospital São José" style="width:260px"></label>'+
  '<button id="hsj-hist-save" type="button" class="btn">Conferir e registrar</button></div>'+
- '<p style="font-size:11px;color:#64748b;margin-top:5px">Os valores iniciais 240 e 1.000 vêm do relatório de 01 a 05/10 enviado. Confirme a fonte antes de gravar. Esse total só vale para a visão geral do hospital.</p></details>'+
+ '<p style="font-size:11px;color:#64748b;margin-top:5px">Os valores iniciais são exemplos: confira no relatório de origem. Para usar estes dados na ocupação, os 6 leitos transitórios da Urgência Particular, SRPA, salas operatórias e espera virtual devem estar excluídos dos pacientes-dia e leitos-dia. Esse total só vale para a visão geral.</p></details>'+
  '<div id="hsj-hist-result" style="margin-top:9px;font-size:12px"></div>';
  holder.appendChild(box);
  box.querySelector('#hsj-hist-save').onclick=async()=>{
@@ -36,11 +36,11 @@ function ui(w,d){
   if(!days.length||days.length>366||!Number.isSafeInteger(patientDays)||!Number.isSafeInteger(bedDays)||bedDays<1||patientDays<0||patientDays>bedDays||source.length<8){
    alert('Informe datas válidas, totais inteiros (pacientes-dia entre zero e leitos-dia) e a fonte comprovada.');return
   }
-  if(!confirm('Confirma que '+patientDays+' pacientes-dia e '+bedDays+' leitos-dia correspondem ao relatório original de '+begin+' a '+end+'? Esta gravação será identificada como fonte externa.'))return;
+  if(!confirm('Confirma que '+patientDays+' pacientes-dia e '+bedDays+' leitos-dia correspondem ao relatório original de '+begin+' a '+end+'? Confirma também que os cálculos já EXCLUEM os 6 leitos da Urgência Particular, SRPA, salas operatórias e espera virtual? Esta gravação será identificada como fonte externa.'))return;
   busy=true;box.querySelector('#hsj-hist-save').disabled=true;
   try{
    const mods=w.firebaseModules,reference=mods.doc(w.db,'hospital',PATH);
-   const now=new Date().toISOString(),entry={inicio:begin,fim:end,pacientesDia:patientDays,leitosDia:bedDays,fonte:source,confirmadoEm:now,escopo:'GERAL',metodo:'agregado_externo'};
+   const now=new Date().toISOString(),entry={inicio:begin,fim:end,pacientesDia:patientDays,leitosDia:bedDays,fonte:source,confirmadoEm:now,escopo:'GERAL',metodo:'agregado_externo',leitosTransitoriosExcluidos:true};
    await mods.runTransaction(w.db,async tx=>{
     const snap=await tx.get(reference),prev=snap.exists()?snap.data():{},all=Array.isArray(prev.periodos)?prev.periodos:[];
     const conflicting=all.find(r=>!(end<r.inicio||begin>r.fim));
@@ -69,7 +69,7 @@ function render(w,d){
  const selected=[...d.querySelectorAll('#checkboxes-setores-container input:checked')].map(x=>x.value);
  const general=!selected.length||selected.includes('GERAL'),days=dates(from,to),windowDays=new Set(days);
  if(!days.length){out.textContent='Selecione um intervalo válido.';return}
- const matches=cache.filter(x=>windowDays.has(x.inicio)&&windowDays.has(x.fim)&&general);
+ const matches=cache.filter(x=>windowDays.has(x.inicio)&&windowDays.has(x.fim)&&general&&x.leitosTransitoriosExcluidos===true);
  let aggregatePD=0,aggregateLD=0,aggregateDays=0,excluded=[],already=[];
  for(const x of matches){
   const segment=dates(x.inicio,x.fim);
@@ -81,7 +81,7 @@ function render(w,d){
   '<div style="margin-top:5px;color:#566778">'+(general?'Os dados externos são consolidados para o hospital; não permitem taxa por setor.':'Visão setorial: dados agregados externos não são aplicados, pois não identificam cada setor.')+
   ' Para o mês completo é necessário completar os demais dias com censos diários, sem sobreposição.</div>'+
   (error?'<div style="color:#a33">'+esc(error)+'</div>':'')+
-  cache.map(x=>'<div style="margin-top:4px">Fonte: '+esc(x.fonte)+' — '+esc(x.inicio)+' a '+esc(x.fim)+' — '+pct(x.pacientesDia,x.leitosDia)+'</div>').join('');
+  cache.map(x=>'<div style="margin-top:4px">Fonte: '+esc(x.fonte)+' — '+esc(x.inicio)+' a '+esc(x.fim)+' — '+(x.leitosTransitoriosExcluidos===true?pct(x.pacientesDia,x.leitosDia):'N/D — confirmar exclusão de áreas transitórias')+'</div>').join('');
  // Never falsely combine a historical aggregate with a daily record for the same day.
  const primary=d.getElementById('hsj-ocupacao-cobertura');
  if(primary&&aggregateDays&&general)primary.title='Há '+aggregateDays+' dias agregados externos verificados. A taxa total só pode incluir estes dias se não houver sobreposição com os censos diários.';

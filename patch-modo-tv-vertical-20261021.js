@@ -188,7 +188,7 @@ function render(){
  let transitoryTotal=0;
  const operationalSector=s=>{
   const name=String(s.nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
-  return !s.virtual&&!name.includes('ESPERA VIRTUAL')&&!name.includes('SALAS OPERATORIAS')&&name!=='SRPA';
+  return !s.virtual&&!name.includes('ESPERA VIRTUAL')&&!name.includes('SALAS OPERATORIAS')&&name!=='SRPA'&&name!=='URGENCIA PARTICULAR';
  };
  sectorsNode.innerHTML=sectors.map(s=>{
  const beds=Array.isArray(s.leitos)?s.leitos:[];

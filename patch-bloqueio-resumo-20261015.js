@@ -36,7 +36,7 @@ function boot(){
   const sectors=Array.isArray(w.setoresData)?w.setoresData:[];
   const isTransitory=sector=>{
    const name=String(sector.nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
-   return sector.virtual===true||name.includes('ESPERA VIRTUAL')||name.includes('SALAS OPERATORIAS')||name==='SRPA';
+   return sector.virtual===true||name.includes('ESPERA VIRTUAL')||name.includes('SALAS OPERATORIAS')||name==='SRPA'||name==='URGENCIA PARTICULAR';
   };
   const effective=sectors.filter(s=>!isTransitory(s));
   const transitory=sectors.filter(isTransitory);
@@ -46,7 +46,7 @@ function boot(){
   const pct=capacity?100*all.ocupado/capacity:0;
   const cards=[['Total',all.total],['Ocupados',all.ocupado],['Disponíveis',all.disponivel],['Reservados',all.reservado],['Higienização',all.higienizacao],['Bloqueados',all.bloqueado],['Ocupação',pct.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%']];
   overview.replaceChildren();
-  const title=d.createElement('div');title.innerHTML='<strong style="font-size:19px;color:#0f2747">Resumo geral da ocupação hospitalar — leitos efetivos</strong><div style="font-size:12px;color:#64748b;margin-top:4px">Somente leitos efetivos de internação. Ocupação = ocupados ÷ (total efetivo − bloqueados efetivos). Excluídos do cálculo: SRPA, salas operatórias e espera virtual.</div>';overview.appendChild(title);
+  const title=d.createElement('div');title.innerHTML='<strong style="font-size:19px;color:#0f2747">Resumo geral da ocupação hospitalar — leitos efetivos</strong><div style="font-size:12px;color:#64748b;margin-top:4px">Somente leitos efetivos de internação. Ocupação = ocupados ÷ (total efetivo − bloqueados efetivos). Excluídos do cálculo: SRPA, salas operatórias, espera virtual e os 6 leitos da Urgência Particular.</div>';overview.appendChild(title);
   const grid=d.createElement('div');grid.className='kpis';
   cards.forEach(([label,value])=>{const cell=d.createElement('div');cell.className='kpi';const small=d.createElement('small');small.textContent=label;const num=d.createElement('b');num.textContent=typeof value==='number'?fmt(value):value;cell.append(small,num);grid.appendChild(cell)});overview.appendChild(grid);
   const wrap=d.createElement('div');wrap.className='scroll';const table=d.createElement('table');

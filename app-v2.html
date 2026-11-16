@@ -2964,7 +2964,7 @@
                 var reservados = s.leitos.filter(function(l) { return l.status === 'reservado'; }).length;
                 var sectorNameNorm = String(s.nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
                 var areaTransitoria = s.virtual===true || sectorNameNorm.includes('ESPERA VIRTUAL') ||
-                    sectorNameNorm.includes('SALAS OPERATORIAS') || sectorNameNorm==='SRPA';
+                    sectorNameNorm.includes('SALAS OPERATORIAS') || sectorNameNorm==='SRPA' || sectorNameNorm==='URGENCIA PARTICULAR';
                 var ocupPercent = total > 0 ? Math.round((ocupados / total) * 100) : 0;
                 var ocupBadgeTexto = areaTransitoria ? 'Área transitória' : ocupPercent + '% Ocup.';
 
@@ -3831,7 +3831,7 @@
             var setorEfetivo = function(s) {
                 var name = String(s.nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
                 return !s.virtual && !name.includes('ESPERA VIRTUAL') &&
-                    !name.includes('SALAS OPERATORIAS') && name !== 'SRPA';
+                    !name.includes('SALAS OPERATORIAS') && name !== 'SRPA' && name !== 'URGENCIA PARTICULAR';
             };
             var leitosEfetivos = setoresParaCalc.filter(setorEfetivo).flatMap(function(s) { return s.leitos||[]; });
             var totalL = leitosEfetivos.length;
@@ -3839,8 +3839,8 @@
             var totalOperacional = Math.max(0,totalL-totalBloqueadosEfetivos);
             var totalOcpAtual = leitosEfetivos.filter(function(l) { return l.status === 'ocupado'; }).length;
             var txOcpAtualVal = totalOperacional > 0 ? (totalOcpAtual / totalOperacional) : 0;
-            var txOcpAtualStr = (txOcpAtualVal * 100).toFixed(1) + '%';
-            var txDesocpAtualStr = ((1 - txOcpAtualVal) * 100).toFixed(1) + '%';
+            var txOcpAtualStr = totalOperacional > 0 ? (txOcpAtualVal * 100).toFixed(1) + '%' : 'N/D';
+            var txDesocpAtualStr = totalOperacional > 0 ? ((1 - txOcpAtualVal) * 100).toFixed(1) + '%' : 'N/D';
 
             var countAdm = 0, countAlt = 0, countOb = 0, countTrfInt = 0, countTrfExt = 0, countResInt = 0, countResExt = 0;
             var somaPermanenciaDias = 0;
@@ -3938,7 +3938,7 @@
             }
 
             var tabHtml = '';
-            setoresParaCalc.forEach(function(s) {
+            setoresParaCalc.filter(setorEfetivo).forEach(function(s) {
                 var sTot = s.leitos.length;
                 var sOcp = s.leitos.filter(function(l) { return l.status === 'ocupado'; }).length;
                 var sTxVal = sTot > 0 ? (sOcp/sTot) : 0;
