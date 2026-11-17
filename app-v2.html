@@ -840,6 +840,43 @@
             return JSON.parse(JSON.stringify(resultado));
         };
 
+
+        // A saída no painel também arquiva solicitações ativas do prontuário
+        // na mesma transação, sem criar outro evento/indicador de saída.
+        function hsjArquivarTransferenciasAoEncerrarInternacao(dados, prontuario, acao, iso, usuario, setor, leito) {
+            const pr=String(prontuario||'').trim();
+            if(!pr)return 0;
+            const ativas=Array.isArray(dados.transferenciasAtivas)?dados.transferenciasAtivas:[];
+            const correspondentes=ativas.filter(t=>String(t.atendimento||'').trim()===pr);
+            if(!correspondentes.length)return 0;
+            dados.transferenciasAtivas=ativas.filter(t=>String(t.atendimento||'').trim()!==pr);
+            dados.transferenciasFinalizadas=Array.isArray(dados.transferenciasFinalizadas)?dados.transferenciasFinalizadas:[];
+            const transferenciaConcluida=acao==='Transferência Externa';
+            for(const t of correspondentes) {
+                const historico=Array.isArray(t.historicoStatus)?t.historicoStatus:[];
+                dados.transferenciasFinalizadas.unshift({
+                    ...t,
+                    status: 'Finalizada',
+                    statusFinal: transferenciaConcluida
+                        ? 'Finalizada / Baixada'
+                        : 'Encerrada automaticamente por '+acao+' no Painel de Leitos (sem transferência efetivada)',
+                    dataFinalizacao:iso,
+                    atualizadoEm:iso,
+                    setorOrigem:setor,
+                    leitoOrigem:String(leito),
+                    origemEncerramento:'Painel de Leitos',
+                    motivoEncerramento:acao,
+                    encerramentoAutomatico:true,
+                    transferenciaEfetivada:transferenciaConcluida,
+                    historicoStatus:[...historico,{
+                        dataIso:iso,status:'Finalizada',statusAnterior:t.status||'',
+                        usuario:usuario||'usuario',motivo:acao,origem:'Painel de Leitos'
+                    }]
+                });
+            }
+            return correspondentes.length;
+        }
+
         // Liberação explícita, segura e persistente do leito (inclusive reserva).
         window.liberarLeitoSelecionadoAtomico = async function(raw) {
             const a=JSON.parse(JSON.stringify(raw||{}));
@@ -880,11 +917,13 @@
                     perfil:'-',convenio:'-',acao:anterior==='reservado'?'Cancelamento de Reserva':'Liberação de Leito',
                     contabilizarIndicadores:false,dataDesfecho:data,dataDesfechoObj:iso
                 });
+                const transferenciasEncerradas=anterior==='ocupado'
+                    ? hsjArquivarTransferenciasAoEncerrarInternacao(dados,pr,'Liberação de Leito',iso,a.usuario,a.setor,a.leito) : 0;
                 const rev=Number(dados._meta?.revision||0)+1;
                 dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,
                     updatedAt:iso,editor:a.usuario||'usuario',safeguards:'liberacao-atomica-v1'};
                 tx.set(ref,dados);
-                return {ok:true,status:'disponivel',anterior,revisao:rev};
+                return {ok:true,status:'disponivel',anterior,revisao:rev,transferenciasEncerradas};
             });
         };
 
@@ -958,15 +997,18 @@
                     dataDesfecho:dataTxt,dataDesfechoObj:agora.toISOString()
                 });
 
+                const transferenciasEncerradas=hsjArquivarTransferenciasAoEncerrarInternacao(
+                    dados,args.pr,args.acao,agora.toISOString(),args.usuario,args.setor,args.leito
+                );
                 const rev=Number(dados&&dados._meta&&dados._meta.revision||0)+1;
                 dados._meta={...(dados._meta||{}),revision:rev,previousRevision:rev-1,updatedAt:agora.toISOString(),safeguards:'multiuser-v4',editor:args.usuario||'usuario'};
                 tx.set(ref,JSON.parse(JSON.stringify(dados)));
                 tx.set(auditRef,JSON.parse(JSON.stringify({
                     tipo:'saida_leito_atomica',criadoEm:agora.toISOString(),setor:args.setor,leito:args.leito,
                     prontuario:args.pr,paciente:args.nome,acao:args.acao,reservaPromovida:reservaPromovida,
-                    usuario:args.usuario||'usuario',revisao:rev
+                    usuario:args.usuario||'usuario',transferenciasEncerradas,revisao:rev
                 })));
-                return {ok:true,reservaPromovida:reservaPromovida,revisao:rev};
+                return {ok:true,reservaPromovida:reservaPromovida,transferenciasEncerradas,revisao:rev};
             });
             return JSON.parse(JSON.stringify(resultado));
         };
@@ -2636,6 +2678,9 @@
                     if (data.transferenciasAtivas) transferenciasAtivas = data.transferenciasAtivas;
                     if (data.transferenciasFinalizadas) transferenciasFinalizadas = data.transferenciasFinalizadas;
                     if (data.basePacientesCadastrados) basePacientesCadastrados = data.basePacientesCadastrados;
+                    // Re-renderiza a Central aberta, inclusive nas estações de outros usuários.
+                    if (document.getElementById('transferencias')?.classList.contains('active') && typeof atualizarTabelasTransferencias==='function')
+                        atualizarTabelasTransferencias();
 
                     renderizarPainelLeitos();
                     aplicarPermissoesInterface();
