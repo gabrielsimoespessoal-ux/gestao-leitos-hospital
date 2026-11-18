@@ -2961,6 +2961,7 @@
             }
             if(tabId === 'plantao') atualizarResumoPlantao();
             if(tabId === 'historico-geral') atualizarTabelaHistoricoGeral();
+            if(tabId === 'movimentacao') atualizarTabelaMovimentacoes();
             if(tabId === 'pacientes-internos') atualizarTabelaPacientesInternos();
         }
 
@@ -3091,6 +3092,7 @@
         }
 
         function atualizarTabelaPacientesInternos() {
+            if(!document.getElementById('pacientes-internos')?.classList.contains('active'))return;
             var tbody = document.getElementById('tabela-pacientes-internos');
             if(!tbody) return;
 
@@ -3114,17 +3116,18 @@
                 return;
             }
 
-            tbody.innerHTML = '';
+            const linhasHtml = [];
             listaInternos.forEach(function(item) {
                 var dadosP = basePacientesCadastrados[item.prontuario] || { nascimento: '-', sexo: '-', perfil: '-' };
-                tbody.innerHTML += '<tr>' +
+                linhasHtml.push('<tr>' +
                     '<td><strong>' + item.prontuario + '</strong></td>' +
                     '<td><a href="#" onclick="abrirEdicaoPaciente(\'' + item.prontuario + '\', \'' + item.paciente + '\', \'' + dadosP.nascimento + '\', \'' + dadosP.perfil + '\')" style="color:var(--primary); font-weight:600; text-decoration:underline;">' + item.paciente + '</a></td>' +
                     '<td><strong>' + item.setor + '</strong> (Leito ' + item.leito + ')</td>' +
                     '<td><span style="color:var(--info); font-weight:600;">' + item.status + '</span></td>' +
                     '<td>' + dadosP.perfil + '</td>' +
-                '</tr>';
+                '</tr>');
             });
+            tbody.innerHTML=linhasHtml.join('');
         }
 
         function abrirEdicaoPaciente(prontuario, nome, nasc, perfil) {
@@ -3627,13 +3630,14 @@
         }
 
         function atualizarTabelaMovimentacoes() {
+            if(!document.getElementById('movimentacao')?.classList.contains('active'))return;
             var tbody = document.getElementById('tabela-mov-acumulada');
             if(!tbody) return;
             if(movimentacoesHistorico.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--text-muted);">Nenhum registo de movimentação recente.</td></tr>';
                 return;
             }
-            tbody.innerHTML = '';
+            const linhasHtml = [];
             movimentacoesHistorico.forEach(function(m, index) {
                 var btnAcoesAdmin = '<button class="btn" style="padding:0.2rem 0.5rem; font-size:0.75rem; background:var(--info); margin-right:4px;" onclick="mudarLeitoPaciente(' + index + ')">Mudar Leito</button>' +
                                     '<button class="btn" style="padding:0.2rem 0.5rem; font-size:0.75rem; background:var(--purple); margin-right:4px;" onclick="solicitarTransferenciaDireta(' + index + ')">Solicitar Trf</button>';
@@ -3642,28 +3646,31 @@
                     btnAcoesAdmin += '<button class="btn-danger" style="padding:0.2rem 0.5rem;font-size:0.75rem;border-radius:4px;border:none;color:white;cursor:pointer;" onclick="excluirMovimentacao(' + index + ')">Excluir</button>';
                 }
                 
-                tbody.innerHTML += '<tr><td>' + m.data + '</td><td>' + m.atendimentoNasc + '</td><td>' + m.paciente + '</td><td>' + m.setor + '</td><td>' + m.origem + ' ➔ ' + m.destino + '</td><td>' + m.perfil + '</td><td><span style="color:var(--danger); font-weight:600;">' + m.acao + '</span></td><td>' + m.dataDesfecho + '</td><td>' + btnAcoesAdmin + '</td></tr>';
+                linhasHtml.push('<tr><td>' + m.data + '</td><td>' + m.atendimentoNasc + '</td><td>' + m.paciente + '</td><td>' + m.setor + '</td><td>' + m.origem + ' ➔ ' + m.destino + '</td><td>' + m.perfil + '</td><td><span style="color:var(--danger); font-weight:600;">' + m.acao + '</span></td><td>' + m.dataDesfecho + '</td><td>' + btnAcoesAdmin + '</td></tr>');
             });
+            tbody.innerHTML=linhasHtml.join('');
         }
 
         function atualizarTabelaHistoricoGeral() {
+            if(!document.getElementById('historico-geral')?.classList.contains('active'))return;
             var tbody = document.getElementById('tabela-historico-geral');
             if(!tbody) return;
             if(movimentacoesHistorico.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--text-muted);">Nenhum histórico registado.</td></tr>';
                 return;
             }
-            tbody.innerHTML = '';
+            const linhasHtml = [];
             movimentacoesHistorico.forEach(function(m) {
-                tbody.innerHTML += '<tr>' +
+                linhasHtml.push('<tr>' +
                     '<td>' + m.data + '</td>' +
                     '<td>-</td><td>-</td><td>-</td><td>-</td>' +
                     '<td>' + m.atendimento + '</td>' +
                     '<td>' + m.paciente + '</td>' +
                     '<td>' + m.setor + '</td>' +
                     '<td><span style="color:var(--primary); font-weight:600;">' + m.acao + '</span></td>' +
-                '</tr>';
+                '</tr>');
             });
+            tbody.innerHTML=linhasHtml.join('');
         }
 
         function excluirMovimentacao(index) {
@@ -3722,15 +3729,17 @@
         }
 
         function atualizarTabelasTransferencias() {
+            if(!document.getElementById('transferencias')?.classList.contains('active'))return;
             var tbAtivas = document.getElementById('tabela-transf-ativas');
             if(!tbAtivas) return;
             if(transferenciasAtivas.length === 0) {
                 tbAtivas.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--text-muted);">Nenhuma transferência ativa no momento.</td></tr>';
             } else {
-                tbAtivas.innerHTML = '';
+                const linhasHtml = [];
                 transferenciasAtivas.forEach(function(t, idx) {
-                    tbAtivas.innerHTML += '<tr><td>' + t.data + '</td><td>' + t.atendimentoNasc + '</td><td>' + t.paciente + '</td><td>' + t.destino + '</td><td>' + t.perfil + '</td><td><span style="color:var(--warning); font-weight:600;">' + t.status + '</span></td><td>DUSV: <strong>' + t.dusv + '</strong></td><td>' + t.pendencias + '</td><td><button class="btn btn-success" style="padding:0.2rem 0.5rem;font-size:0.75rem;" onclick="baixarTransferencia(' + idx + ')">Dar Baixa</button></td></tr>';
+                    linhasHtml.push('<tr><td>' + t.data + '</td><td>' + t.atendimentoNasc + '</td><td>' + t.paciente + '</td><td>' + t.destino + '</td><td>' + t.perfil + '</td><td><span style="color:var(--warning); font-weight:600;">' + t.status + '</span></td><td>DUSV: <strong>' + t.dusv + '</strong></td><td>' + t.pendencias + '</td><td><button class="btn btn-success" style="padding:0.2rem 0.5rem;font-size:0.75rem;" onclick="baixarTransferencia(' + idx + ')">Dar Baixa</button></td></tr>');
                 });
+                tbAtivas.innerHTML=linhasHtml.join('');
             }
         }
 
