@@ -2636,6 +2636,10 @@
         let hsjDadosRetryTimer = null;
         let hsjDadosRetryCount = 0;
         let hsjDadosListenerToken = 0;
+        // Assinaturas de renderização: movimentações de histórico/andamento
+        // não exigem reconstruir todos os leitos e selects do painel.
+        let hsjUltimaAssinaturaSetoresRemotos = null;
+        let hsjUltimaAssinaturaTransferenciasRemotas = null;
         function hsjAgendarReconexaoDados() {
             if(hsjDadosRetryTimer || !window.hsjAuthReady || hsjSnapshotServidorConfirmado) return;
             const delay = Math.min(60000, 20000 * Math.pow(2, Math.min(hsjDadosRetryCount, 2)));
@@ -2667,6 +2671,10 @@
                     multiusuarioStatus = 'sincronizado';
                     hsjDadosRetryCount = 0;
                     if(hsjDadosRetryTimer){window.clearTimeout(hsjDadosRetryTimer);hsjDadosRetryTimer=null;}
+                    // A base recebida é sempre a fonte oficial, mesmo sem mudanças visuais.
+                    const assinaturaSetoresRemotos = JSON.stringify(data.setoresData);
+                    const setoresMudaram = assinaturaSetoresRemotos !== hsjUltimaAssinaturaSetoresRemotos;
+                    hsjUltimaAssinaturaSetoresRemotos = assinaturaSetoresRemotos;
                     if (data.setoresData) setoresData = data.setoresData;
                     if (data.movimentacoesHistorico) {
                         movimentacoesHistorico = data.movimentacoesHistorico.map(m => ({
@@ -2678,11 +2686,23 @@
                     if (data.transferenciasAtivas) transferenciasAtivas = data.transferenciasAtivas;
                     if (data.transferenciasFinalizadas) transferenciasFinalizadas = data.transferenciasFinalizadas;
                     if (data.basePacientesCadastrados) basePacientesCadastrados = data.basePacientesCadastrados;
-                    // Re-renderiza a Central aberta, inclusive nas estações de outros usuários.
-                    if (document.getElementById('transferencias')?.classList.contains('active') && typeof atualizarTabelasTransferencias==='function')
-                        atualizarTabelasTransferencias();
 
-                    renderizarPainelLeitos();
+                    // Redesenhar leitos somente quando seus dados mudarem.
+                    // Mantém todas as atualizações de estado e o listener em tempo real.
+                    if (setoresMudaram) {
+                        renderizarPainelLeitos();
+                        if (document.getElementById('pacientes-internos')?.classList.contains('active') &&
+                            typeof atualizarTabelaPacientesInternos === 'function') atualizarTabelaPacientesInternos();
+                    }
+                    if (document.getElementById('transferencias')?.classList.contains('active') &&
+                        typeof atualizarTabelasTransferencias === 'function') {
+                        const assinaturaTransferencias = JSON.stringify(data.transferenciasAtivas||[]) + '|' +
+                            JSON.stringify(data.transferenciasFinalizadas||[]);
+                        if (setoresMudaram || assinaturaTransferencias !== hsjUltimaAssinaturaTransferenciasRemotas)
+                            atualizarTabelasTransferencias();
+                        hsjUltimaAssinaturaTransferenciasRemotas = assinaturaTransferencias;
+                    }
+
                     aplicarPermissoesInterface();
                     hsjAtualizarProtecaoConexao(true);
                 } else {
