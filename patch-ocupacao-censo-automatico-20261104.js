@@ -3,7 +3,7 @@
 const frame=document.getElementById('appFrame');if(!frame)return;
 const TZ='America/Maceio';
 const excluded=/ESPERA VIRTUAL|SALAS OPERAT[OÓ]RIAS|^SRPA$|^URG[EÊ]NCIA PARTICULAR$/i;
-let wired=false,writing=false,lastAttempt='',daily={},loadingKey='',loadVersion=0;
+let wired=false,writing=false,lastAttempt='',daily={},loadedDays=new Set(),loadingKey='',loadVersion=0;
 let saveError='';
 const dateKey=dt=>{
  const parts=new Intl.DateTimeFormat('en-US',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(dt);
@@ -122,26 +122,32 @@ function render(win,doc){
   });
  }
 }
-async function loadRange(win,doc){
- if(!activeSource(win))return;
- const s=selector(win,doc);if(!s)return;
- const key=s.from+'|'+s.to;
- if(!s.days.length){render(win,doc);return}
- if(key===loadingKey)return;
- loadingKey=key;const version=++loadVersion;
- const {doc:ref,getDoc}=win.firebaseModules;
- // Per-day documents preserve historical results independently of the live bed board.
- for(let i=0;i<s.days.length;i+=12){
-  const batch=s.days.slice(i,i+12);
-  await Promise.all(batch.map(async day=>{
-   try{
-    const snap=await getDoc(ref(win.db,'hospital','censo_'+day.replace(/-/g,'_')));
-    if(version===loadVersion&&snap.exists())daily[day]=snap.data();
-   }catch(err){if(version===loadVersion)saveError='Leitura dos censos: '+String(err.code||err.message||err)}
-  }));
-  if(version!==loadVersion)return;
-  render(win,doc);
- }
+async function loadRange(win,doc,refreshRecent=false){
+  if(!activeSource(win))return;
+  const s=selector(win,doc);if(!s||!s.section.classList.contains('active'))return;
+  const key=s.from+'|'+s.to;
+  if(!s.days.length){render(win,doc);return}
+  if(key===loadingKey&&!refreshRecent)return;
+  loadingKey=key;const version=++loadVersion;
+  const {doc:ref,getDoc}=win.firebaseModules;
+  // Cache dos censos consultados, inclusive dias sem registro.
+  // Na atualização periódica, reler apenas dias recentes.
+  const recentCutoff=dateKey(new Date(Date.now()-2*864e5));
+  const pending=s.days.filter(day=>!loadedDays.has(day)||(refreshRecent&&day>=recentCutoff));
+  for(let i=0;i<pending.length;i+=12){
+   const batch=pending.slice(i,i+12);
+   await Promise.all(batch.map(async day=>{
+    try{
+     const snap=await getDoc(ref(win.db,'hospital','censo_'+day.replace(/-/g,'_')));
+     if(version!==loadVersion)return;
+     if(snap.exists())daily[day]=snap.data();else delete daily[day];
+     loadedDays.add(day);
+    }catch(err){if(version===loadVersion)saveError='Leitura dos censos: '+String(err.code||err.message||err)}
+   }));
+   if(version!==loadVersion)return;
+   if(i===0||i+12>=pending.length)render(win,doc);
+  }
+  if(!pending.length)render(win,doc);
 }
 async function capture(win,doc,snapshot){
  if(writing||!activeSource(win)||!snapshot||snapshot.metadata?.fromCache||snapshot.metadata?.hasPendingWrites||!snapshot.exists())return;
@@ -149,7 +155,7 @@ async function capture(win,doc,snapshot){
  if(!Array.isArray(source.setoresData))return;
  const revision=Number(source._meta?.revision||0),day=dateKey(new Date());
  const snapshotCounts=counts(source.setoresData);
- const signature=day+'|'+revision+'|'+JSON.stringify(snapshotCounts);
+ const signature=day+'|'+JSON.stringify(snapshotCounts); // Ignorar edições sem mudança no censo.
  if(signature===lastAttempt)return;
  writing=true;
  try{
@@ -165,7 +171,7 @@ async function capture(win,doc,snapshot){
    if(prev&&Number(prev.versaoFonte)>revision)return prev;
    tx.set(destination,current);return current;
   });
-  daily[day]=record;lastAttempt=signature;saveError='';
+  daily[day]=record;loadedDays.add(day);lastAttempt=signature;saveError='';
   render(win,doc);
  }catch(err){saveError=String(err.code||err.message||err);render(win,doc)}
  finally{writing=false}
@@ -188,7 +194,7 @@ function init(){
   setInterval(()=>{
    if(!frame.isConnected||doc.hidden||!doc.getElementById('indicadores')?.classList.contains('active'))return;
    loadingKey='';
-   loadRange(win,doc).catch(()=>{});
+   loadRange(win,doc,true).catch(()=>{});
    render(win,doc);
   },120000);
   // Detect day rollover even if no hospital movement has occurred.
@@ -206,6 +212,17 @@ function init(){
  }
  loadRange(win,doc).catch(()=>{});render(win,doc);
 }
-frame.addEventListener('load',()=>{wired=false;daily={};loadingKey='';setTimeout(init,1100)});
-setInterval(init,2500);init();
+let bootstrapTimer=null;
+function bootstrap(){
+ if(bootstrapTimer){clearInterval(bootstrapTimer);bootstrapTimer=null}
+ let attempts=0;
+ bootstrapTimer=setInterval(()=>{
+  init();
+  if(wired||++attempts>100){clearInterval(bootstrapTimer);bootstrapTimer=null}
+ },250);
+ init();
+ if(wired&&bootstrapTimer){clearInterval(bootstrapTimer);bootstrapTimer=null}
+}
+frame.addEventListener('load',()=>{wired=false;daily={};loadedDays=new Set();loadingKey='';loadVersion++;bootstrap()});
+bootstrap();
 })();
