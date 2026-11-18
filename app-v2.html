@@ -3637,8 +3637,14 @@
                 tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--text-muted);">Nenhum registo de movimentação recente.</td></tr>';
                 return;
             }
+            const tamanhoPagina=100;
+            const paginas=Math.max(1,Math.ceil(movimentacoesHistorico.length/tamanhoPagina));
+            const pagina=Math.min(paginas-1,Math.max(0,Number(window.__hsjMovPagina)||0));
+            window.__hsjMovPagina=pagina;
+            const inicio=pagina*tamanhoPagina;
             const linhasHtml = [];
-            movimentacoesHistorico.forEach(function(m, index) {
+            movimentacoesHistorico.slice(inicio,inicio+tamanhoPagina).forEach(function(m, i) {
+                const index=inicio+i;
                 var btnAcoesAdmin = '<button class="btn" style="padding:0.2rem 0.5rem; font-size:0.75rem; background:var(--info); margin-right:4px;" onclick="mudarLeitoPaciente(' + index + ')">Mudar Leito</button>' +
                                     '<button class="btn" style="padding:0.2rem 0.5rem; font-size:0.75rem; background:var(--purple); margin-right:4px;" onclick="solicitarTransferenciaDireta(' + index + ')">Solicitar Trf</button>';
                 
@@ -3649,6 +3655,24 @@
                 linhasHtml.push('<tr><td>' + m.data + '</td><td>' + m.atendimentoNasc + '</td><td>' + m.paciente + '</td><td>' + m.setor + '</td><td>' + m.origem + ' ➔ ' + m.destino + '</td><td>' + m.perfil + '</td><td><span style="color:var(--danger); font-weight:600;">' + m.acao + '</span></td><td>' + m.dataDesfecho + '</td><td>' + btnAcoesAdmin + '</td></tr>');
             });
             tbody.innerHTML=linhasHtml.join('');
+            let navigation=document.getElementById('hsj-mov-pages');
+            if(!navigation){
+                navigation=document.createElement('div');
+                navigation.id='hsj-mov-pages';
+                navigation.style.cssText='display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;padding:12px;font:13px Arial,sans-serif';
+                const table=tbody.closest('.table-container');
+                if(table)table.after(navigation);
+            }
+            if(navigation){
+                const prev=document.createElement('button'),next=document.createElement('button'),label=document.createElement('span');
+                prev.type=next.type='button';prev.className=next.className='btn';
+                prev.textContent='Anterior';next.textContent='Próxima';
+                prev.disabled=pagina===0;next.disabled=pagina===paginas-1;
+                label.textContent='Página '+(pagina+1)+' de '+paginas+' · '+movimentacoesHistorico.length+' registros preservados';
+                prev.onclick=()=>{window.__hsjMovPagina=pagina-1;atualizarTabelaMovimentacoes()};
+                next.onclick=()=>{window.__hsjMovPagina=pagina+1;atualizarTabelaMovimentacoes()};
+                navigation.replaceChildren(prev,label,next);
+            }
         }
 
         function atualizarTabelaHistoricoGeral() {
