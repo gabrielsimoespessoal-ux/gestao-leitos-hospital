@@ -69,6 +69,7 @@ function card(t,done){
  return '<article class="ct-request">'+person+info+stage+notes+act+'</article>';
 }
 function render(){
+ if(!tab.classList.contains('active'))return; // Evitar montagem de cartões fora da central.
  const active=w.transferenciasAtivas||[],done=w.transferenciasFinalizadas||[];
  const items=[['Ativas',active.length],['Aguardando resposta',active.filter(t=>['Solicitação Pendente','Vaga Solicitada'].includes(canon(t.status))).length],['Vaga confirmada',active.filter(t=>canon(t.status)==='Vaga Liberada').length],['Finalizadas (histórico)',done.length]];
  $('ct-kpis').innerHTML=items.map(x=>'<div class="ct-kpi">'+esc(x[0])+'<b>'+x[1]+'</b></div>').join('');
@@ -127,7 +128,7 @@ $('ct-search').onkeydown=e=>{if(e.key==='Enter')render()};
 const oldUpdate=w.atualizarTabelasTransferencias;
 w.atualizarTabelasTransferencias=function(){const v=oldUpdate.apply(this,arguments);if(tab.classList.contains('active'))render();return v};
 const oldSwitch=w.switchTab;w.switchTab=function(name){const v=oldSwitch.apply(this,arguments);if(name==='transferencias')render();return v};
-const tick=w.setInterval(()=>{if(!d.isConnected||frame.contentDocument!==d){w.clearInterval(tick);return}if(tab.classList.contains('active'))render()},15000);
+// Firestore e ações do usuário já atualizam as solicitações: sem redesenho periódico.
 render();return true;
 }
 frame.addEventListener('load',()=>{let n=0;const t=setInterval(()=>{if(init()||++n>120)clearInterval(t)},250)});
