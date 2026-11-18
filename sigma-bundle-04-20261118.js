@@ -470,9 +470,24 @@ get('hsj-timeline-limpar').onclick=()=>{get('hsj-timeline-busca').value='';get('
 get('hsj-timeline-prev').onclick=()=>{page=Math.max(0,page-1);render()};
 get('hsj-timeline-next').onclick=()=>{page++;render()};
 get('hsj-timeline-busca').onkeydown=e=>{if(e.key==='Enter'){page=0;render()}};
-w.atualizarTabelaHistoricoGeral=render;
-const oldSwitch=w.switchTab;w.switchTab=function(tab,el){const result=oldSwitch.apply(this,arguments);if(tab==='historico-geral')render();return result};
-if(tab.classList.contains('active'))render();
+// Não reconstruir nem ordenar milhares de eventos quando o Histórico Geral está oculto.
+// Também agrupa renderizações solicitadas diversas vezes no mesmo ciclo.
+let renderQueued=false;
+function renderWhenVisible(){
+ if(!tab.classList.contains('active')||renderQueued)return;
+ renderQueued=true;
+ w.requestAnimationFrame(()=>{
+  renderQueued=false;
+  if(tab.classList.contains('active'))render();
+ });
+}
+w.atualizarTabelaHistoricoGeral=renderWhenVisible;
+const oldSwitch=w.switchTab;w.switchTab=function(tabName,el){
+ const result=oldSwitch.apply(this,arguments);
+ if(tabName==='historico-geral')renderWhenVisible();
+ return result;
+};
+if(tab.classList.contains('active'))renderWhenVisible();
 }
 frame.addEventListener('load',()=>{initialized=false;setTimeout(setup,200)});
 let n=0;const interval=setInterval(()=>{if(setup()||++n>90)clearInterval(interval)},200);
