@@ -1886,14 +1886,26 @@
 
         const btnConfirmarV13=d.getElementById('btn-confirmar-acao-v5');
         if(btnConfirmarV13){
-          // Remove qualquer handler legado e intercepta o clique na fase de captura.
-          // Isso garante que somente o fluxo atômico V13 seja executado.
+          // Impede clique repetido enquanto a gravação está sendo confirmada.
+          // Não desabilita a transação nem enfraquece validações de concorrência.
+          let acaoV13EmAndamento=false;
           btnConfirmarV13.onclick=null;
           btnConfirmarV13.addEventListener('click',function(ev){
             ev.preventDefault();
             ev.stopPropagation();
             if(typeof ev.stopImmediatePropagation==='function')ev.stopImmediatePropagation();
-            confirmarAcaoPainelV13();
+            if(acaoV13EmAndamento)return;
+            acaoV13EmAndamento=true;
+            btnConfirmarV13.disabled=true;
+            Promise.resolve().then(()=>confirmarAcaoPainelV13())
+              .catch(err=>{
+                console.error('Erro no atalho operacional SIGMA:',err);
+                w.alert('A ação não pôde ser concluída. Confira o painel antes de tentar novamente.');
+              })
+              .finally(()=>{
+                acaoV13EmAndamento=false;
+                btnConfirmarV13.disabled=false;
+              });
           },true);
         }
 
