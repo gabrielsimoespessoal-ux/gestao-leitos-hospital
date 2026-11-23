@@ -187,6 +187,82 @@ root.innerHTML='<div class="page-header"><div><h2>Passagem de plantão — NIR</
 const $=id=>d.getElementById(id),period=()=>{let z=new Date();return z.getFullYear()+'-'+String(z.getMonth()+1).padStart(2,'0')};
 $('hsj-plantao-mes').value=period();
 const refMonth=m=>doc(w.db,'hospital','passagens_plantao_'+m.replace('-','_'));
+
+/* Pendências de plantão: persistência ocorre na mesma transação que arquiva a passagem. */
+const pendRef=doc(w.db,'hospital','pendencias_plantao');
+let pendLoaded=false,pendBusy=false,pendRevision=0,pendFrom=[],pendDraft=[],pendDecisions=new Map(),pendDirty=false;
+const pendAll=()=>pendFrom.concat(pendDraft);
+const pendMsg=msg=>{const el=$('hsj-pend-msg');if(el)el.textContent=msg};
+const pendHtml=()=>{let all=pendAll(),done=all.filter(x=>pendDecisions.get(x.id)?.acao==='resolver').length,next=all.filter(x=>pendDecisions.get(x.id)?.acao==='transferir').length;return {all,done,next,missing:all.length-done-next}};
+const pendBlocked=()=>!w.hsjAuthReady||w.usuarioAtual?.perfil==='Visitante';
+const pendSection=d.createElement('section');pendSection.id='hsj-plantao-acompanhamento';pendSection.className='hsj-bloco';
+pendSection.innerHTML='<div class="hp-head"><div><small>CONTINUIDADE ASSISTENCIAL · NIR</small><h3>Central de pendências do plantão</h3><p>Uma pendência por registro. Toda pendência deve ser resolvida ou transferida para o próximo turno.</p></div><button type="button" class="btn" id="hsj-pend-atualizar">↻ Atualizar</button></div>'+
+'<div class="hp-stats" id="hsj-pend-kpis"></div><div class="hp-form"><label>Nova pendência (uma por vez)<textarea id="hsj-pend-descricao" rows="2" maxlength="600" placeholder="Descreva o que precisa ser acompanhado..."></textarea></label><div class="hp-form-row"><label>Prioridade<select id="hsj-pend-prio"><option>Normal</option><option>Alta</option><option>Crítica</option></select></label><label>Setor / referência<input id="hsj-pend-setor" maxlength="80" placeholder="Opcional"></label><button type="button" class="btn btn-success" id="hsj-pend-incluir">+ Adicionar pendência</button></div></div>'+
+'<div id="hsj-pend-itens" class="hp-itens"></div><div class="hp-status"><span id="hsj-pend-msg" role="status">Consultando servidor...</span><span>Desfechos obrigatórios: <b>Resolvida</b> ou <b>Próximo turno</b></span></div>';
+$('hsj-plantao-gravar').closest('.hsj-bloco').before(pendSection);
+const pendCSS=d.createElement('style');
+pendCSS.textContent='#hsj-plantao-acompanhamento{background:linear-gradient(180deg,#f2faff,#fff 150px);border:1px solid #bedbeb;border-radius:12px;padding:18px!important}#hsj-plantao-acompanhamento .hp-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}#hsj-plantao-acompanhamento .hp-head small{font-size:10px;letter-spacing:.09em;font-weight:800;color:#0c8096}#hsj-plantao-acompanhamento .hp-head h3{font-size:19px;margin:4px 0;color:#164b79}#hsj-plantao-acompanhamento .hp-head p{font-size:12px;color:#617084;margin:0}#hsj-plantao-acompanhamento .hp-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin:15px 0}#hsj-plantao-acompanhamento .hp-stat{background:white;border:1px solid #d5e6f1;border-radius:9px;padding:9px;font-size:11px;color:#546b7d}#hsj-plantao-acompanhamento .hp-stat strong{display:block;color:#12608e;font-size:25px}#hsj-plantao-acompanhamento .hp-stat.missing strong{color:#b76608}#hsj-plantao-acompanhamento .hp-form{background:#eaf5ff;border:1px solid #cbdfee;border-radius:10px;padding:13px;margin-bottom:14px}#hsj-plantao-acompanhamento .hp-form>label{display:block;font-size:12px;font-weight:800;color:#234969}#hsj-plantao-acompanhamento textarea,#hsj-plantao-acompanhamento input,#hsj-plantao-acompanhamento select{display:block;box-sizing:border-box;width:100%;max-width:100%;background:#fff;border:1px solid #bccddd;border-radius:7px;padding:9px;font:inherit;font-size:12px}#hsj-plantao-acompanhamento textarea{resize:vertical}#hsj-plantao-acompanhamento .hp-form>label textarea{margin-top:6px}#hsj-plantao-acompanhamento .hp-form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-top:10px}#hsj-plantao-acompanhamento .hp-form-row label{flex:1 1 130px;font-size:11px;font-weight:700;color:#365875}#hsj-plantao-acompanhamento .hp-form-row label:nth-child(2){flex:2 1 200px}#hsj-plantao-acompanhamento .hp-form-row button{min-height:38px}#hsj-plantao-acompanhamento .hp-itens{display:grid;gap:10px}#hsj-plantao-acompanhamento .hp-card{background:#fff;border:1px solid #d7e3ed;border-left:4px solid #e7a33e;padding:12px;border-radius:9px}#hsj-plantao-acompanhamento .hp-card.resolver{border-left-color:#148b68}#hsj-plantao-acompanhamento .hp-card.transferir{border-left-color:#237fbc}#hsj-plantao-acompanhamento .hp-cardtop{display:flex;align-items:start;justify-content:space-between;gap:10px}#hsj-plantao-acompanhamento .hp-cardtop b{font-size:14px;color:#1a4167;white-space:pre-wrap;overflow-wrap:anywhere}#hsj-plantao-acompanhamento .hp-pill{font-size:10px;font-weight:bold;background:#e4f0fb;color:#1f5c88;padding:3px 7px;border-radius:5px}#hsj-plantao-acompanhamento .hp-pill.Alta{background:#fff0d3;color:#9b5710}#hsj-plantao-acompanhamento .hp-pill.Crítica{background:#ffe6e6;color:#ab2727}#hsj-plantao-acompanhamento .hp-meta{font-size:11px;color:#6a8093;margin:8px 0}#hsj-plantao-acompanhamento .hp-actions{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}#hsj-plantao-acompanhamento .hp-choice{background:#fff;border:1px solid #bdcede;border-radius:7px;padding:8px 10px;font-size:12px;font-weight:700;cursor:pointer;color:#355672}#hsj-plantao-acompanhamento .hp-choice[aria-pressed=true][data-acao=resolver]{background:#def8eb;border-color:#2ca579;color:#086b48}#hsj-plantao-acompanhamento .hp-choice[aria-pressed=true][data-acao=transferir]{background:#e3f1ff;border-color:#2690c8;color:#0c6193}#hsj-plantao-acompanhamento .hp-delete{background:none;border:0;color:#a32b37;cursor:pointer;font-size:12px}#hsj-plantao-acompanhamento .hp-empty{padding:18px;text-align:center;border:1px dashed #bed3e2;border-radius:8px;background:#fff;color:#536c7e;font-size:13px}#hsj-plantao-acompanhamento .hp-status{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid #dce7f2;font-size:11px;color:#516a80}#hsj-plantao-acompanhamento #hsj-pend-msg{font-weight:700;color:#126087}@media(max-width:780px){#hsj-plantao-acompanhamento .hp-stats{grid-template-columns:repeat(2,1fr)}#hsj-plantao-acompanhamento .hp-head{flex-wrap:wrap}}@media print{#hsj-plantao-acompanhamento{display:none!important}}';
+d.head.appendChild(pendCSS);
+function pendRender(){
+ const {all,done,next,missing}=pendHtml();
+ $('hsj-pend-kpis').innerHTML=[['Recebidas',pendFrom.length],['Novas',pendDraft.length],['Resolvidas',done],['Transferidas',next],['Sem desfecho',missing]].map(([k,n],i)=>'<div class="hp-stat '+(i===4&&n?'missing':'')+'">'+k+'<strong>'+n+'</strong></div>').join('');
+ $('hsj-pend-incluir').disabled=!pendLoaded||pendBusy||pendBlocked();
+ $('hsj-pend-atualizar').disabled=pendBusy;
+ $('hsj-pend-itens').innerHTML=!pendLoaded?'<div class="hp-empty">Sem confirmação do servidor. Atualize para continuar.</div>':!all.length?'<div class="hp-empty">✓ Nenhuma pendência aberta. Adicione uma nova, se necessário.</div>':
+ all.map((x,i)=>{
+  const choice=pendDecisions.get(x.id)||{},act=choice.acao||'',isNew=pendDraft.some(y=>y.id===x.id);
+  const meta=isNew?'Criada nesta passagem':'Incluída por '+(x.criadoPor||'Não informado')+' em '+display(x.criadoEm);
+  return '<article class="hp-card '+act+'"><div class="hp-cardtop"><b>'+esc(i+1+'. '+x.texto)+'</b><span class="hp-pill '+esc(x.prioridade||'Normal')+'">'+esc(x.prioridade||'Normal')+'</span></div><div class="hp-meta">'+esc(meta)+(x.setor?' · '+esc(x.setor):'')+(x.vezesTransferida?' · Repassada '+esc(x.vezesTransferida)+' vez(es)':'')+(x.ultimaOrientacao?' · Última orientação: '+esc(x.ultimaOrientacao):'')+'</div><div class="hp-actions"><button type="button" class="hp-choice" data-id="'+esc(x.id)+'" data-acao="resolver" aria-pressed="'+(act==='resolver')+'">✓ Resolvida</button><button type="button" class="hp-choice" data-id="'+esc(x.id)+'" data-acao="transferir" aria-pressed="'+(act==='transferir')+'">→ Próximo turno</button>'+(isNew?'<button type="button" class="hp-delete" data-remove="'+esc(x.id)+'">Remover rascunho</button>':'')+'</div><textarea class="hp-note" maxlength="400" data-nota="'+esc(x.id)+'" rows="1" placeholder="Orientação ou justificativa do desfecho (opcional)">'+esc(choice.nota||'')+'</textarea></article>';
+ }).join('');
+ if(!pendLoaded)pendMsg('Pendências indisponíveis; liberação bloqueada até confirmar conexão.');
+ else if(missing)pendMsg(missing+' pendência(s) aguardando desfecho obrigatório.');
+ else pendMsg('✓ Pendências revisadas. Salve junto com a liberação do plantão.');
+}
+async function pendRead(force){
+ if(pendBusy||(pendDirty&&!force))return;
+ pendBusy=true;
+ try{
+  const snap=await getDoc(pendRef);
+  if(snap.metadata?.fromCache)throw Error('Consulta sem confirmação do servidor.');
+  const data=snap.exists()?snap.data():{};
+  if(snap.exists()&&!Array.isArray(data.itens))throw Error('Formato de pendências inválido.');
+  const rev=Number(data.revisao||0);if(!Number.isInteger(rev)||rev<0)throw Error('Revisão inválida.');
+  pendFrom=Array.isArray(data.itens)?data.itens:[];pendRevision=rev;pendLoaded=true;pendDraft=[];pendDecisions.clear();pendDirty=false;
+ }catch(e){pendLoaded=false;pendMsg('Erro de sincronização: '+String(e.message||e))}
+ finally{pendBusy=false;pendRender()}
+}
+$('hsj-pend-incluir').onclick=()=>{
+ if(!pendLoaded||pendBlocked())return;
+ const input=$('hsj-pend-descricao'),texto=input.value.trim().replace(/\s+/g,' ');
+ if(texto.length<8){pendMsg('Descreva a pendência com pelo menos 8 caracteres.');input.focus();return}
+ if(pendAll().length>=100){pendMsg('Limite de 100 pendências nesta passagem.');return}
+ const id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,11);
+ pendDraft.push({id,texto,prioridade:$('hsj-pend-prio').value,setor:$('hsj-pend-setor').value.trim()});pendDirty=true;
+ input.value='';$('hsj-pend-setor').value='';$('hsj-pend-prio').value='Normal';pendRender();
+};
+$('hsj-pend-itens').addEventListener('click',e=>{
+ const b=e.target.closest('button');if(!b||pendBlocked()||!pendLoaded)return;
+ if(b.dataset.remove){pendDraft=pendDraft.filter(x=>x.id!==b.dataset.remove);pendDecisions.delete(b.dataset.remove);pendDirty=true;pendRender();return}
+ if(!b.dataset.id||!['resolver','transferir'].includes(b.dataset.acao))return;
+ pendDecisions.set(b.dataset.id,{...pendDecisions.get(b.dataset.id),acao:b.dataset.acao});pendDirty=true;pendRender();
+});
+$('hsj-pend-itens').addEventListener('input',e=>{
+ const id=e.target.dataset.nota;if(!id)return;
+ pendDecisions.set(id,{...pendDecisions.get(id),nota:e.target.value});pendDirty=true;
+});
+$('hsj-pend-atualizar').onclick=()=>{
+ if(pendDirty&&!w.confirm('Descartar rascunhos e escolhas não liberadas para carregar a versão atual?'))return;
+ pendRead(true);
+};
+function pendPrepare(){
+ if(!pendLoaded||pendBusy)throw Error('As pendências ainda não foram confirmadas pelo servidor. Clique em Atualizar.');
+ if(pendBlocked())throw Error('Sem autorização para liberar pendências.');
+ const all=pendAll();
+ const missing=all.filter(x=>!['resolver','transferir'].includes(pendDecisions.get(x.id)?.acao));
+ if(missing.length){$('hsj-pend-itens').querySelector('.hp-card:not(.resolver):not(.transferir)')?.scrollIntoView({block:'center',behavior:'smooth'});throw Error('Defina o desfecho de '+missing.length+' pendência(s) antes de liberar.')}
+ return {revisao:pendRevision,novas:pendDraft.map(x=>({...x})),acoes:all.map(x=>({id:x.id,acao:pendDecisions.get(x.id).acao,nota:String(pendDecisions.get(x.id).nota||'').trim()}))};
+}
+pendRender();pendRead(true);
 function calculate(state,start,end){
 const setores=(state.setoresData||[]).filter(s=>!s.virtual&&s.nome!=='ESPERA VIRTUAL INTERNA');
 const ocupacao=setores.map(s=>({nome:s.nome,internos:(s.leitos||[]).filter(l=>l.status==='ocupado').length}));
@@ -250,6 +326,7 @@ async function read(){
    '<details style="flex:1;min-width:0"><summary style="cursor:pointer"><strong>'+esc(display(x.criadoEm))+'</strong> · '+esc(x.responsavel)+'</summary>'+
    '<p class="hsj-help">Período: '+esc(display(x.inicio))+' a '+esc(display(x.criadoEm))+'</p>'+
    summary(x.resumo)+'<div style="margin-top:12px">'+transfers(x.resumo)+'</div><h4>Observações</h4>'+
+   (x.pendenciasPlantao?.itens?.length?'<h4>Pendências e desfechos</h4>'+table(['Pendência','Desfecho','Orientação'],x.pendenciasPlantao.itens.map(y=>[y.texto,y.desfecho,y.notaDesfecho||'—'])):'<p class="hsj-help">Sem pendências registradas nesta passagem.</p>')+
    '<p style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(x.observacoes||'Sem observações')+'</p></details></div>'
   ).join(''):'Nenhuma passagem registrada neste mês.';
   host.querySelectorAll('input[name="hsj-selecionar-plantao"]').forEach(input=>{
@@ -315,6 +392,7 @@ function printRecord(item){
   '<div class="resumo-setores"><section><h2>Internos por setor</h2>'+table(['Setor','Total'],resumo.ocupacao.map(x=>[x.nome,x.internos]))+'</section><section><h2>Admissões por setor</h2>'+table(['Setor','Total'],resumo.admSetorial.map(x=>[x.nome,x.total]))+'</section></div>'+
   '<h2>Transferências pendentes ('+numPendentes+')</h2>'+(numPendentes?table(['Paciente / prontuário','Origem + leito','Destino','Situação','Pendências','DUSV'],resumo.pendentes.map(x=>[x.paciente+' / '+x.atendimento,lookupNow(x),x.destino,x.status,x.pendencias||'—',x.dusv||'—'])):'<p>Nenhuma transferência pendente.</p>')+
   (missingOriginal?'<p style="font-size:7pt;color:#475569">* Localização atual consultada na impressão. Não comprova o leito na data da passagem arquivada.</p>':'')+
+  '<h2>Pendências do plantão ('+esc(item.pendenciasPlantao?.itens?.length||0)+')</h2>'+(item.pendenciasPlantao?.itens?.length?table(['Pendência / setor','Prioridade','Desfecho','Orientação'],item.pendenciasPlantao.itens.map(x=>[x.texto+(x.setor?' · '+x.setor:''),x.prioridade,x.desfecho,x.notaDesfecho||'—'])):'<p>Nenhuma pendência registrada nesta passagem.</p>')+
   '<h2>Observações do plantão</h2><div class="obs">'+esc(item.observacoes||'Sem observações registradas')+'</div><div class="rodape">Registro arquivado · Transferências internas: '+esc(resumo.internas)+' · Saídas da UTI: '+esc(resumo.altasUti)+'. Documento gerado a partir da passagem gravada.</div></body></html>';
   return content;
 }
@@ -359,18 +437,18 @@ try{
  const now=new Date(),iso=now.toISOString(),mes=localDay().slice(0,7),archive=refMonth(mes);
  if(typeof w.hsjGravarPassagemPlantaoV2!=='function')throw Error('Módulo de gravação indisponível; atualize a página.');
  const result=await w.hsjGravarPassagemPlantaoV2({
-  mes, responsavel:autor, observacoes,
+  mes, responsavel:autor, observacoes, pendenciasPlantao:pendPrepare(),
   setores:state.setoresData,
   movimentacoes:state.movimentacoesHistorico||[],
   transferencias:state.transferenciasAtivas||[],
   revisaoFonte:Number(state._meta?.revision||0)
  });
  if(!result?.ok)throw Error('Servidor não confirmou o arquivamento.');
-status.textContent='Passagem arquivada com sucesso em '+display(iso);$('hsj-plantao-obs').value='';$('hsj-plantao-mes').value=mes;await read();refresh()
+await pendRead(true);status.textContent='Passagem arquivada com sucesso em '+display(iso);$('hsj-plantao-obs').value='';$('hsj-plantao-mes').value=mes;await read();refresh()
 }catch(e){status.textContent='Falha ao salvar: '+String(e.message||e)}
 finally{btn.disabled=false}
 };
-const oldSwitch=w.switchTab;w.switchTab=function(tab){const result=oldSwitch.apply(this,arguments);if(tab==='plantao'){refresh();read()}return result};
+const oldSwitch=w.switchTab;w.switchTab=function(tab){const result=oldSwitch.apply(this,arguments);if(tab==='plantao'){refresh();read();if(!pendDirty)pendRead()}return result};
 const oldUpdate=w.atualizarResumoPlantao;if(typeof oldUpdate==='function')w.atualizarResumoPlantao=function(){refresh()};
 if(root.classList.contains('active')){refresh();read()}
 const timer=setInterval(()=>{if(!d.isConnected||frame.contentDocument!==d){clearInterval(timer);return}refresh()},20000);
