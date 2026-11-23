@@ -1189,8 +1189,60 @@
             if(!/^\d{4}-\d{2}$/.test(String(a.mes||''))) throw new Error('Mês inválido.');
             if(!Array.isArray(a.movimentacoes) || !Array.isArray(a.setores) || !Array.isArray(a.transferencias)) throw new Error('Resumo incompleto.');
             const ref = doc(db,'hospital','passagens_plantao_'+a.mes.replace('-','_'));
+            const pendenciasRef = doc(db,'hospital','pendencias_plantao');
+            const incoming = a.pendenciasPlantao;
+            if(!incoming || !Array.isArray(incoming.novas) || !Array.isArray(incoming.acoes))
+                throw new Error('Módulo de pendências ausente. Atualize a página antes de liberar.');
             const {registros,gravado} = await runTransaction(db,async tx=>{
                 const snapshot = await tx.get(ref);
+                const pendenciasSnap = await tx.get(pendenciasRef);
+                const activeData = pendenciasSnap.exists()?pendenciasSnap.data():{};
+                if(pendenciasSnap.exists()&&!Array.isArray(activeData.itens))
+                    throw new Error('Formato de pendências inválido no servidor.');
+                const active = Array.isArray(activeData.itens)?activeData.itens:[];
+                const currentRevision=Number(activeData.revisao||0);
+                if(!Number.isInteger(currentRevision)||currentRevision!==Number(incoming.revisao))
+                    throw new Error('Pendências atualizadas por outro plantão. Clique em Atualizar e confira os desfechos antes de liberar.');
+                if(active.length>100||incoming.novas.length>100||active.length+incoming.novas.length>100)
+                    throw new Error('Quantidade de pendências acima do limite de segurança (100).');
+                const nowPending=new Date().toISOString();
+                const seen=new Set(active.map(x=>String(x.id||'')));
+                if(seen.size!==active.length||seen.has(''))throw new Error('Inconsistência nos IDs das pendências.');
+                const newItems = incoming.novas.map(x=>{
+                    const id=String(x.id||'').trim(),texto=String(x.texto||'').trim();
+                    const prioridade=String(x.prioridade||'Normal');
+                    const setor=String(x.setor||'').trim();
+                    if(!/^p[a-z0-9]{8,40}$/.test(id)||seen.has(id)||texto.length<8||texto.length>600||
+                       !['Normal','Alta','Crítica'].includes(prioridade)||setor.length>80)
+                        throw new Error('Uma nova pendência contém dados inválidos ou duplicados.');
+                    seen.add(id);
+                    return {id,texto,prioridade,setor,criadoEm:nowPending,criadoPor:nome,vezesTransferida:0};
+                });
+                const items=active.concat(newItems);
+                const actionMap=new Map();
+                for(const x of incoming.acoes){
+                    const id=String(x.id||''),acao=String(x.acao||''),nota=String(x.nota||'').trim();
+                    if(!seen.has(id)||actionMap.has(id)||!['resolver','transferir'].includes(acao)||nota.length>400)
+                        throw new Error('Desfecho inválido, duplicado ou não relacionado a uma pendência.');
+                    actionMap.set(id,{acao,nota});
+                }
+                if(actionMap.size!==items.length)throw new Error('Cada pendência deve ter exatamente um desfecho.');
+                const rowsPending=items.map(x=>{
+                    const action=actionMap.get(x.id);
+                    const transferida=action.acao==='transferir';
+                    return {...x,desfecho:transferida?'Transferida para o próximo turno':'Resolvida',
+                        notaDesfecho:action.nota,desfechoPor:nome,desfechoEm:nowPending,
+                        vezesTransferida:Number(x.vezesTransferida||0)+(transferida?1:0)};
+                });
+                const remaining=rowsPending.filter(x=>x.desfecho!=='Resolvida').map(x=>({
+                    id:x.id,texto:x.texto,prioridade:x.prioridade,setor:x.setor,criadoEm:x.criadoEm,
+                    criadoPor:x.criadoPor,vezesTransferida:x.vezesTransferida,
+                    ultimaPassagemEm:nowPending,ultimaPassagemPor:nome,ultimaOrientacao:x.notaDesfecho
+                }));
+                const pendenciasArquivo={itens:rowsPending,recebidas:active.length,
+                    novas:newItems.length,resolvidas:rowsPending.length-remaining.length,transferidas:remaining.length};
+                const previous = snapshot.exists() && Array.isArray(snapshot.data().registros) ? JSON.parse(JSON.stringify(snapshot.data().registros)) : [];
+
                 const previous = snapshot.exists() && Array.isArray(snapshot.data().registros) ? JSON.parse(JSON.stringify(snapshot.data().registros)) : [];
                 const now = new Date();
                 const nowMs = now.getTime();
@@ -1247,10 +1299,11 @@
                     })
                 };
                 const record={criadoEm:now.toISOString(),inicio:new Date(fromMs).toISOString(),responsavel:nome,
-                  observacoes:String(a.observacoes||''),resumo:summary,revisaoFonte:Number(a.revisaoFonte||0)};
+                  observacoes:String(a.observacoes||''),resumo:summary,pendenciasPlantao:pendenciasArquivo,revisaoFonte:Number(a.revisaoFonte||0)};
                 // Build the actual payload as plain objects and arrays in this window's realm.
                 const next={registros:previous.concat([record]),atualizadoEm:record.criadoEm};
                 tx.set(ref,next);
+                tx.set(pendenciasRef,{itens:remaining,revisao:currentRevision+1,atualizadoEm:nowPending,ultimaPassagemEm:record.criadoEm});
                 return {registros:next.registros.length,gravado:record.criadoEm};
             });
             return {ok:true,registros,gravado};
