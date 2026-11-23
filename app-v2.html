@@ -1242,8 +1242,6 @@
                 const pendenciasArquivo={itens:rowsPending,recebidas:active.length,
                     novas:newItems.length,resolvidas:rowsPending.length-remaining.length,transferidas:remaining.length};
                 const previous = snapshot.exists() && Array.isArray(snapshot.data().registros) ? JSON.parse(JSON.stringify(snapshot.data().registros)) : [];
-
-                const previous = snapshot.exists() && Array.isArray(snapshot.data().registros) ? JSON.parse(JSON.stringify(snapshot.data().registros)) : [];
                 const now = new Date();
                 const nowMs = now.getTime();
                 let fromMs = previous.length ? new Date(previous[previous.length-1].criadoEm).getTime() : nowMs - 12*3600000;
