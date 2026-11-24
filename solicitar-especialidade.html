@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Cache-Control" content="no-store">
-<title>SIGMA · Solicitar avaliação de especialidade</title>
+<title>SIGMA · Solicitar avaliação de Cardiologia</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color:#183553;background:#eff5f9;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;min-height:100vh;background:linear-gradient(140deg,#edf7fb,#f9fbfc 55%,#f1f5f9)}
@@ -44,7 +44,7 @@ footer{text-align:center;color:#75899a;margin:15px 0;font-size:11px;line-height:
 <div class="notice"><strong>Atenção:</strong> este formulário não substitui comunicação imediata em casos urgentes. Confirme o envio e comunique a equipe pelos fluxos assistenciais habituais.</div>
 <form id="form" autocomplete="off">
 <div class="grid">
-<label>Especialidade <span class="req">*</span><select name="especialidade" id="especialidade" required><option value="">Selecione a especialidade</option><option>Cardiologia</option></select></label>
+<label>Especialidade<input id="especialidade" name="especialidade" value="Cardiologia" readonly aria-readonly="true"></label>
 <label>Data da solicitação <span class="req">*</span><input id="dataSolicitacao" type="date" required></label>
 <label>Nome do paciente <span class="req">*</span><input id="paciente" maxlength="140" minlength="3" required placeholder="Nome completo do paciente"></label>
 <label>Leito <span class="req">*</span><input id="leito" maxlength="60" required placeholder="Ex.: Ala A · 103"></label>
