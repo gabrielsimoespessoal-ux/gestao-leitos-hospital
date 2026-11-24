@@ -8,7 +8,7 @@
     <!-- Firebase SDK (Modular CDN) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, runTransaction, collection, getDocs, query, orderBy, limit, addDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, runTransaction, collection, getDocs, query, orderBy, limit, startAfter, addDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         const firebaseConfig = {
@@ -74,7 +74,7 @@
             if (tela) tela.style.display = 'none';
             hsjIniciarAposLogin();
         }, erro => hsjMostrarLoginFirebase('Falha na autenticação: ' + String(erro.code || 'erro')));
-        window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction, collection, getDocs, query, orderBy, limit, addDoc, updateDoc, serverTimestamp };
+        window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction, collection, getDocs, query, orderBy, limit, startAfter, addDoc, updateDoc, serverTimestamp };
         // Salva observações do Modo TV dentro do contexto do próprio Firebase.
         // Evita objetos de outro frame e faz comparação atômica para não sobrescrever colegas.
         window.hsjSalvarObservacoesTv = async function(texto, esperado, editor) {
