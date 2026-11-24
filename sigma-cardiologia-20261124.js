@@ -11,7 +11,7 @@ const short=x=>String(x||'').length>110?String(x).slice(0,107)+'…':String(x||'
 const clean=x=>String(x||'').trim().replace(/\s+/g,' ');
 function setup(){
 let w,d;try{w=frame.contentWindow;d=frame.contentDocument}catch{return false}
-if(!d||!w||!d.querySelector('nav.subnav')||!d.querySelector('.main-container')||!w.firebaseModules?.getDocs||!w.firebaseModules?.runTransaction||!w.hsjAuthReady)return false;
+if(!d||!w||!d.querySelector('nav.subnav')||!d.querySelector('.main-container')||!w.firebaseModules?.getDocs||!w.firebaseModules?.runTransaction)return false;
 if(w.__hsjCardiologia20261124)return true;
 w.__hsjCardiologia20261124=true;ready=true;
 const {collection,doc,query,orderBy,limit,startAfter,getDocs,addDoc,runTransaction,serverTimestamp}=w.firebaseModules;
