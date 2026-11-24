@@ -2,8 +2,49 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Acesso inicial restrito à conta administrativa cadastrada no Firebase Auth.
-    // Não substitua por allow read, write: if true.
+
+    // O formulário externo só pode CRIAR uma solicitação de Cardiologia.
+    // Jamais permite consultar pacientes, pesquisar pedidos, modificar
+    // desfechos ou apagar registros.
+    match /solicitacoes_especialidades/{id} {
+      allow create: if request.auth == null
+        && request.resource.data.keys().hasOnly([
+          'especialidade', 'dataSolicitacao', 'paciente', 'leito',
+          'setor', 'solicitante', 'funcao', 'motivo',
+          'status', 'origem', 'criadoEm'
+        ])
+        && request.resource.data.keys().hasAll([
+          'especialidade', 'dataSolicitacao', 'paciente', 'leito',
+          'setor', 'solicitante', 'funcao', 'motivo',
+          'status', 'origem', 'criadoEm'
+        ])
+        && request.resource.data.especialidade == 'Cardiologia'
+        && request.resource.data.status == 'Enviada'
+        && request.resource.data.origem == 'Formulário público SIGMA'
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.dataSolicitacao is string
+        && request.resource.data.dataSolicitacao.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.paciente is string
+        && request.resource.data.paciente.size() >= 3
+        && request.resource.data.paciente.size() <= 140
+        && request.resource.data.leito is string
+        && request.resource.data.leito.size() >= 1
+        && request.resource.data.leito.size() <= 60
+        && request.resource.data.setor is string
+        && request.resource.data.setor.size() <= 80
+        && request.resource.data.solicitante is string
+        && request.resource.data.solicitante.size() >= 3
+        && request.resource.data.solicitante.size() <= 120
+        && request.resource.data.funcao is string
+        && request.resource.data.funcao.size() <= 80
+        && request.resource.data.motivo is string
+        && request.resource.data.motivo.size() >= 8
+        && request.resource.data.motivo.size() <= 3000;
+    }
+
+    // Mantém a política de segurança já existente para o SIGMA.
+    // Somente o usuário administrativo autorizado possui leitura
+    // e gerenciamento dos documentos do Firestore.
     match /{document=**} {
       allow read, write: if request.auth != null
         && request.auth.uid == '1ryCbJM0KvNSRCaPbzgGM4gcM7v2';
