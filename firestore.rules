@@ -2,11 +2,25 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /cardiologyRequests/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['paciente','leito','data','motivo','solicitante','createdAt'])
+        && request.resource.data.keys().hasAll(['paciente','leito','data','motivo','solicitante','createdAt'])
+        && request.resource.data.paciente is string && request.resource.data.paciente.size() > 0 && request.resource.data.paciente.size() <= 160
+        && request.resource.data.leito is string && request.resource.data.leito.size() > 0 && request.resource.data.leito.size() <= 40
+        && request.resource.data.data is string && request.resource.data.data.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && request.resource.data.motivo is string && request.resource.data.motivo.size() > 0 && request.resource.data.motivo.size() <= 2000
+        && request.resource.data.solicitante is string && request.resource.data.solicitante.size() > 0 && request.resource.data.solicitante.size() <= 160
+        && request.resource.data.createdAt == request.time;
+      allow read: if request.auth != null && request.auth.uid == '1ryCbJM0KvNSRCaPbzgGM4gcM7v2';
+    }
     // Acesso inicial restrito à conta administrativa cadastrada no Firebase Auth.
     // Não substitua por allow read, write: if true.
     match /{document=**} {
-      allow read, write: if request.auth != null
+      allow read: if request.auth != null
         && request.auth.uid == '1ryCbJM0KvNSRCaPbzgGM4gcM7v2';
+    }
+    match /{root}/{document=**} {
+      allow write: if root != 'cardiologyRequests' && request.auth != null && request.auth.uid == '1ryCbJM0KvNSRCaPbzgGM4gcM7v2';
     }
   }
 }
