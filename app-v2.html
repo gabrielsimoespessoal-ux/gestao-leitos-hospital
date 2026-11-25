@@ -2563,11 +2563,23 @@
                         m.contabilizarIndicadores=confirm('INDICADORES HOSPITALARES\\n\\nDeseja computar '+a+' nos indicadores?\\n'+(origemUti?'Origem UTI: transferências computadas também contam como alta da UTI.\\n':'')+'\\nOK: computar | Cancelar: não computar');
                     }else m.contabilizarIndicadores=false;
                 });
+                // Os históricos arquivados continuam disponíveis para consulta,
+                // mas NÃO devem retornar ao documento central ao salvar novos leitos.
+                const arquivoEstado=window.hsjArquivoHistoricoStatus;
+                if((firebaseBaseSnapshotLocal?._historicoArquivo?.movimentacoes?.length||
+                    firebaseBaseSnapshotLocal?._historicoArquivo?.transferencias?.length)&&
+                    (!arquivoEstado?.pronto||
+                     arquivoEstado.referencias.length!==(
+                        (firebaseBaseSnapshotLocal._historicoArquivo.movimentacoes||[]).length+
+                        (firebaseBaseSnapshotLocal._historicoArquivo.transferencias||[]).length)))
+                    throw Error('Arquivo histórico ainda não validado. Aguarde a sincronização antes de salvar.');
                 var local = normalizarFirebaseSeguro({
                     setoresData: setoresData,
-                    movimentacoesHistorico: movimentacoesHistorico,
+                    movimentacoesHistorico: (movimentacoesHistorico||[]).filter(m=>!
+                        arquivoEstado?.chavesMovimentos?.has(chaveEventoMulti(m))),
                     transferenciasAtivas: transferenciasAtivas,
-                    transferenciasFinalizadas: transferenciasFinalizadas,
+                    transferenciasFinalizadas: (transferenciasFinalizadas||[]).filter(t=>!
+                        arquivoEstado?.chavesTransferencias?.has(chaveTransferenciaMulti(t))),
                     basePacientesCadastrados: basePacientesCadastrados
                 });
 
@@ -2865,7 +2877,50 @@
                     }
 
                     aplicarPermissoesInterface();
-                    hsjAtualizarProtecaoConexao(true);
+                    const refsArq=(data._historicoArquivo?.movimentacoes||[])
+                        .concat(data._historicoArquivo?.transferencias||[]);
+                    const archiveCache=window.hsjArquivoHistoricoStatus;
+                    const sameArchive=archiveCache?.pronto&&refsArq.length===archiveCache.referencias.length&&
+                      refsArq.every((key,index)=>key===archiveCache.referencias[index]);
+                    const hydrate=arq=>{
+                        if(token!==hsjDadosListenerToken)return;
+                        const activeMov=Array.isArray(data.movimentacoesHistorico)?data.movimentacoesHistorico:[];
+                        movimentacoesHistorico=activeMov.concat(arq.movimentos||[])
+                          .map(m=>({...m,
+                             dataDesfechoObj:m.dataDesfechoObj?(typeof m.dataDesfechoObj.toDate==='function'?
+                               m.dataDesfechoObj.toDate():new Date(m.dataDesfechoObj)):null,
+                             dataAdmissaoObj:m.dataAdmissaoObj?(typeof m.dataAdmissaoObj.toDate==='function'?
+                               m.dataAdmissaoObj.toDate():new Date(m.dataAdmissaoObj)):null}))
+                          .sort((a,b)=>String(b.dataIso||b.data||'').localeCompare(String(a.dataIso||a.data||'')));
+                        transferenciasFinalizadas=(Array.isArray(data.transferenciasFinalizadas)?
+                          data.transferenciasFinalizadas:[]).concat(arq.transferencias||[]);
+                        hsjAtualizarProtecaoConexao(true);
+                        if(document.getElementById('historico-geral')?.classList.contains('active'))
+                          atualizarTabelaHistoricoGeral();
+                        if(document.getElementById('movimentacao')?.classList.contains('active'))
+                          atualizarTabelaMovimentacoes();
+                        if(document.getElementById('indicadores')?.classList.contains('active'))
+                          renderizarIndicadores();
+                        if(document.getElementById('transferencias')?.classList.contains('active'))
+                          atualizarTabelasTransferencias();
+                    };
+                    if(!refsArq.length){
+                        window.hsjArquivoHistoricoStatus={pronto:true,referencias:[],movimentos:[],
+                          transferencias:[],chavesMovimentos:new Set(),chavesTransferencias:new Set()};
+                        hsjAtualizarProtecaoConexao(true);
+                    }else if(sameArchive){
+                        hydrate(archiveCache);
+                    }else{
+                        hsjAtualizarProtecaoConexao(false,'Validando histórico arquivado no servidor...');
+                        window.hsjArquivoHistoricoStatus.pronto=false;
+                        window.hsjCarregarArquivoHistorico(data._historicoArquivo).then(hydrate)
+                          .catch(e=>{
+                            if(token!==hsjDadosListenerToken)return;
+                            console.error('Falha ao reconstituir arquivo histórico:',e);
+                            multiusuarioStatus='conflito';
+                            hsjAtualizarProtecaoConexao(false,'Erro de integridade do arquivo histórico. Nenhuma gravação será liberada até recarregar os registros.');
+                          });
+                    }
                 } else {
                     multiusuarioStatus='conflito';
                     hsjAtualizarProtecaoConexao(false,'Documento hospital/dados não encontrado no servidor.');
@@ -3860,6 +3915,10 @@
 
         function excluirMovimentacao(index) {
             if(usuarioAtual.perfil !== 'Administrador') { alert('Acesso restrito.'); return; }
+            if(window.hsjArquivoHistoricoStatus?.chavesMovimentos?.has(chaveEventoMulti(movimentacoesHistorico[index]))) {
+                alert('Este movimento foi preservado em arquivo histórico auditável e não pode ser excluído pela rotina antiga.');
+                return;
+            }
             if(confirm("Deseja excluir este registo?")) {
                 movimentacoesHistorico.splice(index, 1);
                 renderizarPainelLeitos();
