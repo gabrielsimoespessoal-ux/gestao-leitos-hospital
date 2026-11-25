@@ -75,6 +75,116 @@
             hsjIniciarAposLogin();
         }, erro => hsjMostrarLoginFirebase('Falha na autenticação: ' + String(erro.code || 'erro')));
         window.firebaseModules = { doc, setDoc, getDoc, onSnapshot, runTransaction, collection, getDocs, query, orderBy, limit, startAfter, addDoc, updateDoc, serverTimestamp };
+
+        // Arquivo imutável de históricos. O documento central guarda apenas os
+        // registros recentes; movimentos antigos são recuperados para indicadores.
+        const hsjArquivoCache = new Map();
+        const hsjArchiveBytes = value => new TextEncoder().encode(JSON.stringify(value)).length;
+        const hsjArquivoKeyMov = x => [
+          String(x?.atendimento||''),String(x?.dataIso||x?.data||''),
+          String(x?.acao||''),String(x?.setor||''),String(x?.paciente||'')
+        ].join('||');
+        const hsjArquivoKeyTrans = x => [
+          String(x?.atendimento||''),String(x?.dataIso||x?.data||''),
+          String(x?.paciente||''),String(x?.destino||'')
+        ].join('||');
+        window.hsjArquivoHistoricoStatus = {pronto:true,referencias:[],movimentos:[],transferencias:[],
+          chavesMovimentos:new Set(),chavesTransferencias:new Set()};
+        window.hsjCarregarArquivoHistorico = async function(metadados) {
+          const refsMov = Array.isArray(metadados?.movimentacoes)?metadados.movimentacoes:[];
+          const refsTrans = Array.isArray(metadados?.transferencias)?metadados.transferencias:[];
+          const refs = refsMov.concat(refsTrans);
+          if(refs.some(id=>typeof id!=='string'||!/^hsj_arquivo_(mov|trans)_[A-Za-z0-9_-]+$/.test(id)))
+             throw Error('Índice do arquivo histórico contém referência inválida.');
+          const missing=refs.filter(id=>!hsjArquivoCache.has(id));
+          for(let offset=0;offset<missing.length;offset+=8){
+            const batch=missing.slice(offset,offset+8);
+            const docs=await Promise.all(batch.map(id=>getDoc(doc(db,'hospital',id))));
+            docs.forEach((snap,i)=>{
+              if(!snap.exists()||snap.metadata?.fromCache||!Array.isArray(snap.data()?.registros))
+                throw Error('Arquivo histórico não confirmado no servidor: '+batch[i]);
+              if(snap.data().registros.length>150)throw Error('Arquivo histórico com quantidade inválida.');
+              hsjArquivoCache.set(batch[i],snap.data().registros);
+            });
+          }
+          const movimentos=refsMov.flatMap(id=>hsjArquivoCache.get(id)||[]);
+          const transferencias=refsTrans.flatMap(id=>hsjArquivoCache.get(id)||[]);
+          const status={pronto:true,referencias:refs,movimentos,transferencias,
+            chavesMovimentos:new Set(movimentos.map(hsjArquivoKeyMov)),
+            chavesTransferencias:new Set(transferencias.map(hsjArquivoKeyTrans))};
+          window.hsjArquivoHistoricoStatus=status;
+          return status;
+        };
+        window.hsjCompactarDadosComArquivo = async function() {
+          if(!window.hsjAuthReady||auth.currentUser?.uid!=='1ryCbJM0KvNSRCaPbzgGM4gcM7v2')
+            throw Error('A manutenção exige autenticação administrativa do Firebase.');
+          const principal=doc(db,'hospital','dados');
+          const outcome=await runTransaction(db,async tx=>{
+            const snapshot=await tx.get(principal);
+            if(!snapshot.exists()||snapshot.metadata?.fromCache)throw Error('Dados do servidor indisponíveis.');
+            const original=snapshot.data();
+            if(!Array.isArray(original.movimentacoesHistorico)||!Array.isArray(original.setoresData))
+              throw Error('Estrutura central de dados inválida; manutenção não executada.');
+            const before=hsjArchiveBytes(original);
+            if(before<470000)return {already:true,before,after:before};
+            const current={...original},mov=[...original.movimentacoesHistorico],
+              finalized=Array.isArray(original.transferenciasFinalizadas)?[...original.transferenciasFinalizadas]:[];
+            const removedMov=[],removedFinal=[];
+            current.movimentacoesHistorico=mov;
+            current.transferenciasFinalizadas=finalized;
+            // Arquivar as entradas mais antigas em blocos pequenos; manter as
+            // 120 movimentações e as 30 transferências finalizadas mais recentes.
+            let iterations=0;
+            while(hsjArchiveBytes(current)>510000&&mov.length>120&&++iterations<500){
+              removedMov.unshift(...mov.splice(Math.max(120,mov.length-100),100));
+            }
+            iterations=0;
+            while(hsjArchiveBytes(current)>510000&&finalized.length>30&&++iterations<500){
+              removedFinal.unshift(...finalized.splice(Math.max(30,finalized.length-80),80));
+            }
+            const now=new Date().toISOString();
+            const previous=original._historicoArquivo||{};
+            const docsToWrite=[];
+            const refsMov=Array.isArray(previous.movimentacoes)?previous.movimentacoes.slice():[];
+            const refsTrans=Array.isArray(previous.transferencias)?previous.transferencias.slice():[];
+            const archive=(kind,items,refs)=>{
+              for(let j=0;j<items.length;j+=100){
+                const chunk=items.slice(j,j+100);
+                const key='hsj_arquivo_'+kind+'_'+now.replace(/[^0-9A-Za-z]/g,'')+'_'+Math.random().toString(36).slice(2,12)+'_'+j;
+                const record={tipo:kind,criadoEm:now,registros:chunk,quantidade:chunk.length,
+                  revisaoOriginal:Number(original._meta?.revision||0)};
+                if(hsjArchiveBytes(record)>850000)throw Error('Pacote de arquivo muito grande. Manutenção cancelada.');
+                docsToWrite.push({ref:doc(db,'hospital',key),record});
+                refs.push(key);
+              }
+            };
+            archive('mov',removedMov,refsMov);
+            archive('trans',removedFinal,refsTrans);
+            current._historicoArquivo={versao:1,movimentacoes:refsMov,transferencias:refsTrans,ultimaCompactacao:now};
+            const after=hsjArchiveBytes(current);
+            if(after>590000||!docsToWrite.length)
+              throw Error('Não foi possível criar margem de segurança apenas arquivando movimentações e transferências. Nenhum dado foi modificado.');
+            if(removedMov.length+mov.length!==original.movimentacoesHistorico.length||
+               removedFinal.length+finalized.length!==(original.transferenciasFinalizadas||[]).length||
+               hsjArchiveBytes(current.setoresData)!==hsjArchiveBytes(original.setoresData)||
+               hsjArchiveBytes(current.basePacientesCadastrados||{})!==hsjArchiveBytes(original.basePacientesCadastrados||{}))
+              throw Error('Verificação de integridade falhou; operação cancelada.');
+            for(const item of docsToWrite)tx.set(item.ref,item.record);
+            current._meta={...(original._meta||{}),revision:Number(original._meta?.revision||0)+1,
+              previousRevision:Number(original._meta?.revision||0),updatedAt:now,
+              safeguards:'historico-arquivado-atomicamente',editor:'manutencao-autorizada'};
+            tx.set(principal,current);
+            return {already:false,before,after,arquivadosMov:removedMov.length,
+              arquivadasTransferencias:removedFinal.length,totalArquivos:docsToWrite.length};
+          });
+          if(!outcome.already){
+            const snap=await getDoc(principal);
+            if(!snap.exists()||snap.metadata?.fromCache)throw Error('Gravação concluída, mas confirmação do servidor não disponível. Atualize e confira.');
+            await window.hsjCarregarArquivoHistorico(snap.data()?._historicoArquivo);
+          }
+          return outcome;
+        };
+
         // Salva observações do Modo TV dentro do contexto do próprio Firebase.
         // Evita objetos de outro frame e faz comparação atômica para não sobrescrever colegas.
         window.hsjSalvarObservacoesTv = async function(texto, esperado, editor) {
