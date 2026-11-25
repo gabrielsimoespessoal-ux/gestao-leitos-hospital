@@ -115,6 +115,22 @@
           window.hsjArquivoHistoricoStatus=status;
           return status;
         };
+        window.hsjDiagnosticarEspaco = async function() {
+          if(!window.hsjAuthReady||auth.currentUser?.uid!=='1ryCbJM0KvNSRCaPbzgGM4gcM7v2')
+            throw Error('Diagnóstico restrito ao administrador autorizado.');
+          const snap=await getDoc(doc(db,'hospital','dados'));
+          if(!snap.exists()||snap.metadata?.fromCache)throw Error('Documento central não confirmado no servidor.');
+          const data=snap.data();
+          const bytes=hsjArchiveBytes(data);
+          const sizes={};
+          for(const [key,value] of Object.entries(data||{}))
+            sizes[key]=hsjArchiveBytes(value);
+          return {estimativaBytes:bytes,componentesBytes:sizes,
+            movimentos:Array.isArray(data.movimentacoesHistorico)?data.movimentacoesHistorico.length:0,
+            transferenciasFinalizadas:Array.isArray(data.transferenciasFinalizadas)?data.transferenciasFinalizadas.length:0,
+            arquivosHistoricos:(data._historicoArquivo?.movimentacoes||[]).length+(data._historicoArquivo?.transferencias||[]).length,
+            revisao:Number(data._meta?.revision||0)};
+        };
         window.hsjCompactarDadosComArquivo = async function() {
           if(!window.hsjAuthReady||auth.currentUser?.uid!=='1ryCbJM0KvNSRCaPbzgGM4gcM7v2')
             throw Error('A manutenção exige autenticação administrativa do Firebase.');
