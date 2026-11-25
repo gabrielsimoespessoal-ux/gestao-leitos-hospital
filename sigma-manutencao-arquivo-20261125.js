@@ -11,11 +11,26 @@ function mount(){
  card.innerHTML='<div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#0e829a">ADMINISTRAÇÃO · INTEGRIDADE DE DADOS</div>'+
  '<h3 style="font-size:19px;color:#15456e;margin:7px 0">Arquivo histórico e espaço do Firestore</h3>'+
  '<p style="font-size:13px;color:#516b7e;line-height:1.5">A ferramenta transfere movimentações antigas para documentos históricos separados, preservando os eventos, indicadores e auditoria. Nenhum leito, paciente ou transferência ativa é alterado. A operação é atômica: se a validação não for concluída, nada é gravado.</p>'+
- '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0"><button type="button" id="hsj-arquivar-historico" class="btn" style="background:#0a7e91;color:white;font-weight:800">Arquivar histórico antigo com segurança</button>'+
+ '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0"><button type="button" id="hsj-arquivar-historico" class="btn" style="background:#0a7e91;color:white;font-weight:800">Arquivar histórico antigo com segurança</button><button type="button" class="btn" id="hsj-diagnostico-espaco" style="background:#e5f2fc;color:#184c77;font-weight:800">Conferir espaço utilizado</button>'+
  '<span style="font-size:12px;color:#6a7c8c">Execute uma vez, com as demais estações do SIGMA atualizadas.</span></div>'+
  '<div id="hsj-arquivo-status" role="status" aria-live="polite" style="font-weight:700;color:#1b536f;font-size:12px;white-space:pre-wrap"></div>';
  const admin=d.getElementById('admin');admin.prepend(card);
  const btn=d.getElementById('hsj-arquivar-historico'),status=d.getElementById('hsj-arquivo-status');
+ const diagnosticar=d.getElementById('hsj-diagnostico-espaco');
+ diagnosticar.addEventListener('click',async()=>{
+  if(diagnosticar.disabled)return;
+  diagnosticar.disabled=true;status.textContent='Consultando o tamanho do banco central no servidor...';
+  try{
+   const info=await w.hsjDiagnosticarEspaco();
+   const kb=n=>(Number(n||0)/1024).toFixed(1);
+   const maiores=Object.entries(info.componentesBytes).sort((a,b)=>b[1]-a[1]).slice(0,5)
+      .map(([k,v])=>k+': '+kb(v)+' KiB').join(' | ');
+   status.textContent='Tamanho estimado do documento: '+kb(info.estimativaBytes)+' KiB. Movimentações: '+
+      info.movimentos+' · Transferências finalizadas: '+info.transferenciasFinalizadas+
+      ' · Arquivos históricos: '+info.arquivosHistoricos+'. Maiores campos: '+maiores+'.';
+  }catch(err){status.textContent='Não foi possível medir o banco: '+String(err.message||err)}
+  finally{diagnosticar.disabled=false}
+ });
  btn.addEventListener('click',async()=>{
   if(btn.disabled)return;
   if(!w.hsjAuthReady){status.textContent='Entre com a conta administrativa do SIGMA para executar a manutenção.';return}
