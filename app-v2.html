@@ -3552,6 +3552,20 @@
                     console.error('Erro no fluxo seguro nativo de entrada:', err);
                     if (err && err.code === 'CONFLITO_REAL') {
                         alert('CONFLITO REAL DETECTADO.\n\n' + err.message + '\n\nNenhum dado foi sobrescrito. Atualize a página e confira o leito.');
+                    } else if (/exceeds the maximum allowed size|cannot be written because its size|resource-exhausted/i.test(String(err?.message||err))) {
+                        if(window.hsjAuthReady&&typeof window.hsjCompactarDadosComArquivo==='function'&&
+                           confirm('O documento central ultrapassou 1 MiB. A movimentação NÃO foi salva.\\n\\nDeseja executar a manutenção de arquivo histórico com segurança para liberar espaço?')){
+                            try{
+                                const espaco=await window.hsjCompactarDadosComArquivo();
+                                if(!espaco||(!espaco.already&&!Number.isInteger(espaco.totalArquivos)))
+                                    throw Error('O banco não confirmou o arquivamento.');
+                                alert('Manutenção de espaço confirmada. Atualize o SIGMA, confira o leito e clique em Salvar / Executar novamente para registrar a movimentação.');
+                            }catch(arquivoErro){
+                                alert('Manutenção não confirmada. Nenhuma movimentação foi salva. Detalhe: '+String(arquivoErro?.message||arquivoErro));
+                            }
+                        }else{
+                            alert('O banco central atingiu o limite de 1 MiB e a movimentação NÃO foi salva. Abra Administração e Auditoria → Arquivo histórico e espaço do Firestore.');
+                        }
                     } else {
                         alert('Não foi possível gravar a movimentação no banco: ' + (err && err.message ? err.message : err));
                     }
