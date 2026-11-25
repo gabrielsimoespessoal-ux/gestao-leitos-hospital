@@ -435,6 +435,47 @@
               console.error('Falha na entrada atômica:',err);
               if(err?.code==='CONFLITO_REAL'){
                 w.alert('CONFLITO REAL DETECTADO.\n\n'+err.message+'\n\nNenhum dado foi sobrescrito. Atualize a página e confira o leito.');
+              }else if(/exceeds the maximum allowed size|cannot be written because its size|maximum allowed size of 1,048,576 bytes|resource-exhausted/i.test(String(err?.message||err))){
+                // Nenhuma movimentação foi confirmada. Oferecer recuperação com
+                // consentimento e autorizações do próprio Firebase (sem excluir dados).
+                if(w.hsjAuthReady&&typeof w.hsjCompactarDadosComArquivo==='function'&&
+                   !w.__hsjRecuperacaoLimiteEmAndamento&&
+                   w.confirm('LIMITE DE ARMAZENAMENTO DO SIGMA\\n\\nO banco central está cheio e esta movimentação NÃO foi gravada.\\n\\nDeseja executar agora a manutenção segura de arquivo histórico e, somente se confirmada, tentar salvar NOVAMENTE este mesmo pedido?\\n\\nMantenha as demais estações sem novas operações durante a manutenção.')){
+                  w.__hsjRecuperacaoLimiteEmAndamento=true;
+                  try{
+                    const compactacao=await w.hsjCompactarDadosComArquivo();
+                    // Reler as condições a partir do servidor antes de qualquer
+                    // segunda tentativa; a transação do paciente revalida o leito.
+                    if(!compactacao||(!compactacao.already&&!Number.isInteger(compactacao.totalArquivos)))
+                      throw Error('Manutenção não confirmada pelo servidor.');
+                    const resultadoRecuperado=await w.executarEntradaLeitoAtomica({
+                      acao:ac,setor,leito,pr,nome,nasc,sexo,perfil,convenio:conv,
+                      precaucao:prec,origem,previsaoAlta:previsao,
+                      usuario:w.usuarioAtual?.nome||'usuario'
+                    });
+                    if(!resultadoRecuperado?.status)throw Error('O banco não confirmou a movimentação após a recuperação.');
+                    const sec=w.setoresData?.find(x=>x.nome===setor);
+                    const bed=sec?.leitos?.find(x=>String(x.n)===String(leito));
+                    if(bed){bed.status=resultadoRecuperado.status;bed.paciente=nome;bed.prontuario=pr;}
+                    if(w.basePacientesCadastrados)w.basePacientesCadastrados[pr]={
+                      ...(w.basePacientesCadastrados[pr]||{}),nome,nascimento:nasc,sexo,
+                      perfil,convenio:conv,precaucao:prec,origem,
+                      previsaoAlta:previsao,statusInternacao:resultadoRecuperado.status==='ocupado'?'ativo':'reservado',
+                      prontuarioPendente:gerado
+                    };
+                    w.renderizarPainelLeitos?.();
+                    w.atualizarTabelaPacientesInternos?.();
+                    ['mov-atendimento','mov-paciente','mov-nascimento'].forEach(id=>{const el=d.getElementById(id);if(el)el.value='';});
+                    if(d.getElementById('mov-previsao-alta-paciente'))d.getElementById('mov-previsao-alta-paciente').value='';
+                    const action=d.getElementById('mov-acao');if(action)action.selectedIndex=0;
+                    w.alert('MANUTENÇÃO CONFIRMADA. '+(ac==='Admissão'?'Admissão':'Reserva')+' salva com sucesso no banco após o arquivamento seguro do histórico.');
+                  }catch(recoveryError){
+                    console.error('Recuperação de limite falhou; pedido não confirmado:',recoveryError);
+                    w.alert('A recuperação não foi concluída e a movimentação NÃO está confirmada.\\n\\nDetalhe: '+String(recoveryError?.message||recoveryError)+'\\n\\nVerifique o leito e utilize Administração e Auditoria → Arquivo histórico antes de tentar novamente.');
+                  }finally{w.__hsjRecuperacaoLimiteEmAndamento=false}
+                }else{
+                  w.alert('O documento hospital/dados atingiu o limite de 1 MiB. A movimentação NÃO foi gravada.\\n\\nEntre no perfil Administrador e execute Administração e Auditoria → Arquivo histórico e espaço do Firestore. Não exclua dados manualmente.');
+                }
               }else{
                 w.alert('Não foi possível gravar a movimentação no banco: '+(err?.message||err));
               }
