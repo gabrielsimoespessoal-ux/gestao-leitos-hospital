@@ -2586,6 +2586,13 @@
                 var novaRevisao = await runTransaction(window.db, async function(tx) {
                     var snap = await tx.get(ref);
                     var remoto = snap.exists() ? normalizarFirebaseSeguro(snap.data()) : {};
+                    const serverArchiveRefs=(remoto._historicoArquivo?.movimentacoes||[])
+                        .concat(remoto._historicoArquivo?.transferencias||[]);
+                    if(serverArchiveRefs.length&&
+                      (serverArchiveRefs.length!==(arquivoEstado?.referencias||[]).length||
+                       serverArchiveRefs.some((key,index)=>key!==arquivoEstado.referencias[index])||
+                       arquivoEstado.pronto!==true))
+                      throw Error('O arquivo histórico foi atualizado no servidor. Recarregue o SIGMA antes de salvar.');
 
                     var merged = normalizarFirebaseSeguro(remoto);
                     merged.setoresData = mergeSetoresMulti(base.setoresData||[], local.setoresData||[], remoto.setoresData||[]);
@@ -2809,6 +2816,7 @@
         let hsjDadosRetryTimer = null;
         let hsjDadosRetryCount = 0;
         let hsjDadosListenerToken = 0;
+        let hsjArquivoSnapshotSeq = 0;
         // Assinaturas de renderização: movimentações de histórico/andamento
         // não exigem reconstruir todos os leitos e selects do painel.
         let hsjUltimaAssinaturaSetoresRemotos = null;
@@ -2839,6 +2847,7 @@
                     // Snapshot remoto é a fonte oficial, inclusive após gravação local.
 
                     const data = docSnap.data();
+                    const archiveSnapshotSeq=++hsjArquivoSnapshotSeq;
                     firebaseBaseSnapshotLocal = normalizarFirebaseSeguro(data);
                     firebaseRevisionLocal = Number(data && data._meta && data._meta.revision || 0);
                     multiusuarioStatus = 'sincronizado';
@@ -2883,7 +2892,7 @@
                     const sameArchive=archiveCache?.pronto&&refsArq.length===archiveCache.referencias.length&&
                       refsArq.every((key,index)=>key===archiveCache.referencias[index]);
                     const hydrate=arq=>{
-                        if(token!==hsjDadosListenerToken)return;
+                        if(token!==hsjDadosListenerToken||archiveSnapshotSeq!==hsjArquivoSnapshotSeq)return;
                         const activeMov=Array.isArray(data.movimentacoesHistorico)?data.movimentacoesHistorico:[];
                         movimentacoesHistorico=activeMov.concat(arq.movimentos||[])
                           .map(m=>({...m,
@@ -2915,7 +2924,7 @@
                         window.hsjArquivoHistoricoStatus.pronto=false;
                         window.hsjCarregarArquivoHistorico(data._historicoArquivo).then(hydrate)
                           .catch(e=>{
-                            if(token!==hsjDadosListenerToken)return;
+                            if(token!==hsjDadosListenerToken||archiveSnapshotSeq!==hsjArquivoSnapshotSeq)return;
                             console.error('Falha ao reconstituir arquivo histórico:',e);
                             multiusuarioStatus='conflito';
                             hsjAtualizarProtecaoConexao(false,'Erro de integridade do arquivo histórico. Nenhuma gravação será liberada até recarregar os registros.');
